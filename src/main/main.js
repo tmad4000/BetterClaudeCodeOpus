@@ -18,6 +18,15 @@ const getSessionsPath = () => {
   return path.join(userDataPath, 'sessions.json');
 };
 
+// Get default working directory (~/code if exists, otherwise ~)
+const getDefaultCwd = () => {
+  const codeDir = path.join(process.env.HOME, 'code');
+  if (fs.existsSync(codeDir)) {
+    return codeDir;
+  }
+  return process.env.HOME;
+};
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -69,7 +78,7 @@ ipcMain.handle('terminal:create', (event, options = {}) => {
     name: 'xterm-256color',
     cols: options.cols || 80,
     rows: options.rows || 24,
-    cwd: options.cwd || `${process.env.HOME}/code`,
+    cwd: options.cwd || getDefaultCwd(),
     env: { ...process.env, TERM: 'xterm-256color' }
   });
 
@@ -117,7 +126,7 @@ ipcMain.on('terminal:kill', (event, id) => {
 
 ipcMain.handle('claude:create-session', (event, options = {}) => {
   const id = ++claudeSessionIdCounter;
-  const cwd = options.cwd || `${process.env.HOME}/code`;
+  const cwd = options.cwd || getDefaultCwd();
   const permissionMode = options.permissionMode || 'default';
 
   // Build args based on permission mode

@@ -3,9 +3,12 @@ import { ClaudeSessionProvider, useClaudeSession, PERMISSION_MODES } from './con
 import { TerminalProvider } from './context/TerminalContext';
 import ClaudeTerminal from './components/ClaudeTerminal';
 import TerminalPanel from './components/TerminalPanel';
+import ProcessTracker from './components/ProcessTracker';
+import PrettyView from './components/PrettyView';
+import PromptHistory from './components/PromptHistory';
 import {
   Plus, X, Terminal, Sparkles, Folder,
-  Shield, ShieldCheck, Zap
+  Shield, ShieldCheck, Zap, Clock, Code
 } from './components/Icons';
 
 function formatRelativeTime(timestamp) {
@@ -90,7 +93,7 @@ function PermissionModeSelector({ currentMode, onSelect, onClose }) {
   );
 }
 
-function Sidebar({ showTerminalPanel, setShowTerminalPanel }) {
+function Sidebar({ showTerminalPanel, setShowTerminalPanel, onShowHistory }) {
   const {
     sessions,
     activeSessionId,
@@ -104,6 +107,7 @@ function Sidebar({ showTerminalPanel, setShowTerminalPanel }) {
   } = useClaudeSession();
 
   const [showModeSelector, setShowModeSelector] = useState(false);
+  const [showProcessTracker, setShowProcessTracker] = useState(false);
 
   const handleNewSession = async () => {
     await createSession();
@@ -238,6 +242,14 @@ function Sidebar({ showTerminalPanel, setShowTerminalPanel }) {
       </div>
 
       <div style={{ padding: 16, borderTop: '1px solid var(--border-primary)', marginTop: 'auto' }}>
+        {/* Process Tracker */}
+        <div style={{ marginBottom: 12 }}>
+          <ProcessTracker
+            isExpanded={showProcessTracker}
+            onToggle={() => setShowProcessTracker(!showProcessTracker)}
+          />
+        </div>
+
         <div
           className="sidebar-item"
           onClick={handleSelectDirectory}
@@ -255,7 +267,7 @@ function Sidebar({ showTerminalPanel, setShowTerminalPanel }) {
         <div
           className="sidebar-item"
           onClick={() => setShowTerminalPanel(!showTerminalPanel)}
-          style={{ marginBottom: 0 }}
+          style={{ marginBottom: 8 }}
         >
           <Terminal className="sidebar-item-icon" />
           <div className="sidebar-item-content">
@@ -263,12 +275,24 @@ function Sidebar({ showTerminalPanel, setShowTerminalPanel }) {
             <div className="sidebar-item-meta">{showTerminalPanel ? 'Visible' : 'Hidden'}</div>
           </div>
         </div>
+
+        <div
+          className="sidebar-item"
+          onClick={onShowHistory}
+          style={{ marginBottom: 0 }}
+        >
+          <Clock className="sidebar-item-icon" />
+          <div className="sidebar-item-content">
+            <div className="sidebar-item-title">Prompt History</div>
+            <div className="sidebar-item-meta">Browse past prompts</div>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function MainArea({ showTerminalPanel, terminalHeight, onResizeStart }) {
+function MainArea({ showTerminalPanel, terminalHeight, onResizeStart, viewMode, setViewMode }) {
   const {
     sessions,
     activeSessionId,
@@ -286,37 +310,101 @@ function MainArea({ showTerminalPanel, terminalHeight, onResizeStart }) {
       <div className="top-bar">
         <div className="top-bar-tabs">
           {activeSession ? (
-            <span style={{ fontSize: 14, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Sparkles style={{ width: 16, height: 16, color: 'var(--accent-primary)' }} />
-              {activeSession.title}
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ fontSize: 14, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Sparkles style={{ width: 16, height: 16, color: 'var(--accent-primary)' }} />
+                {activeSession.title}
+              </span>
+              <span style={{
+                fontSize: 13,
+                color: 'var(--accent-cyan)',
+                fontWeight: 500,
+                fontFamily: 'monospace',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '2px 8px',
+                background: 'rgba(34, 211, 238, 0.1)',
+                borderRadius: 'var(--radius-sm)',
+              }}>
+                <Folder style={{ width: 14, height: 14 }} />
                 {activeSession.cwd}
               </span>
-            </span>
+            </div>
           ) : (
             <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>No active session</span>
           )}
         </div>
 
-        {/* Permission mode badge in top bar */}
-        {activeSession && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '4px 10px',
-              background: 'var(--bg-tertiary)',
-              border: '1px solid var(--border-primary)',
-              borderRadius: 'var(--radius-md)',
-              fontSize: 12,
-              color: modeConfig.color,
-            }}
-          >
-            <PermissionModeIcon mode={activeSessionMode} size={14} />
-            {modeConfig.name}
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* View mode toggle */}
+          {activeSession && (
+            <div
+              style={{
+                display: 'flex',
+                background: 'var(--bg-tertiary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: 'var(--radius-md)',
+                overflow: 'hidden',
+              }}
+            >
+              <button
+                onClick={() => setViewMode('terminal')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '4px 10px',
+                  background: viewMode === 'terminal' ? 'var(--accent-primary)' : 'transparent',
+                  color: viewMode === 'terminal' ? 'white' : 'var(--text-secondary)',
+                  border: 'none',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                }}
+              >
+                <Terminal style={{ width: 14, height: 14 }} />
+                Terminal
+              </button>
+              <button
+                onClick={() => setViewMode('pretty')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '4px 10px',
+                  background: viewMode === 'pretty' ? 'var(--accent-primary)' : 'transparent',
+                  color: viewMode === 'pretty' ? 'white' : 'var(--text-secondary)',
+                  border: 'none',
+                  fontSize: 12,
+                  cursor: 'pointer',
+                }}
+              >
+                <Code style={{ width: 14, height: 14 }} />
+                Pretty
+              </button>
+            </div>
+          )}
+
+          {/* Permission mode badge in top bar */}
+          {activeSession && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '4px 10px',
+                background: 'var(--bg-tertiary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: 'var(--radius-md)',
+                fontSize: 12,
+                color: modeConfig.color,
+              }}
+            >
+              <PermissionModeIcon mode={activeSessionMode} size={14} />
+              {modeConfig.name}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Claude terminal area */}
@@ -340,13 +428,23 @@ function MainArea({ showTerminalPanel, terminalHeight, onResizeStart }) {
           </div>
         ) : (
           <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-            {sessions.map((session) => (
-              <ClaudeTerminal
-                key={session.id}
-                sessionId={session.id}
-                isActive={session.id === activeSessionId}
-              />
-            ))}
+            {viewMode === 'terminal' ? (
+              sessions.map((session) => (
+                <ClaudeTerminal
+                  key={session.id}
+                  sessionId={session.id}
+                  isActive={session.id === activeSessionId}
+                />
+              ))
+            ) : (
+              sessions.map((session) => (
+                <PrettyView
+                  key={session.id}
+                  sessionId={session.id}
+                  isActive={session.id === activeSessionId}
+                />
+              ))
+            )}
           </div>
         )}
       </div>
@@ -407,6 +505,8 @@ function AppContent() {
   const [showTerminalPanel, setShowTerminalPanel] = useState(false);
   const [terminalHeight, setTerminalHeight] = useState(250);
   const [isResizing, setIsResizing] = useState(false);
+  const [viewMode, setViewMode] = useState('terminal'); // 'terminal' or 'pretty'
+  const [showHistory, setShowHistory] = useState(false);
 
   const handleResizeStart = useCallback((e) => {
     e.preventDefault();
@@ -440,11 +540,22 @@ function AppContent() {
       <Sidebar
         showTerminalPanel={showTerminalPanel}
         setShowTerminalPanel={setShowTerminalPanel}
+        onShowHistory={() => setShowHistory(true)}
       />
       <MainArea
         showTerminalPanel={showTerminalPanel}
         terminalHeight={terminalHeight}
         onResizeStart={handleResizeStart}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+      />
+      <PromptHistory
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+        onSelectPrompt={(prompt) => {
+          // Could auto-fill the prompt into the active session
+          console.log('Selected prompt:', prompt);
+        }}
       />
     </div>
   );
