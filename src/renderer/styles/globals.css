@@ -865,7 +865,7 @@ body {
 
 /* Xterm overrides */
 .xterm {
-  padding: 8px;
+  /* Padding removed to be handled by container */
 }
 
 .xterm-viewport {

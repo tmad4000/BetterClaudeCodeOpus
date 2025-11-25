@@ -135,11 +135,14 @@ export default function ClaudeTerminal({ sessionId, isActive, onReady }) {
   return (
     <div
       ref={containerRef}
+      onClick={() => xtermRef.current?.focus()}
       style={{
         width: '100%',
         height: '100%',
         display: isActive ? 'block' : 'none',
         backgroundColor: '#0d1117',
+        padding: '8px',
+        boxSizing: 'border-box',
       }}
     />
   );

@@ -130,10 +130,13 @@ function TerminalInstance({ terminal, isActive }) {
   return (
     <div
       ref={containerRef}
+      onClick={() => xtermRef.current?.focus()}
       style={{
         width: '100%',
         height: '100%',
         display: isActive ? 'block' : 'none',
+        padding: '8px',
+        boxSizing: 'border-box',
       }}
     />
   );
