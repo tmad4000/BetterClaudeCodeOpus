@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const pty = require('node-pty');
+const { exec } = require('child_process');
 
 const isDev = process.env.NODE_ENV === 'development';
 
@@ -344,4 +345,211 @@ ipcMain.handle('history:get-session', async (event, sessionId) => {
 // Get history directory path (for user reference)
 ipcMain.handle('history:get-path', () => {
   return getHistoryDir();
+});
+
+// ============ Process and Port Tracking ============
+
+// Track spawned processes from Claude sessions
+const spawnedProcesses = new Map();
+
+// Register a spawned process
+ipcMain.on('process:register', (event, { sessionId, pid, name, port, cwd }) => {
+  const key = `${sessionId}-${pid}`;
+  spawnedProcesses.set(key, {
+    sessionId,
+    pid,
+    name,
+    port,
+    cwd,
+    startedAt: Date.now(),
+  });
+  // Notify renderer of update
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('process:updated');
+  }
+});
+
+// Unregister a spawned process
+ipcMain.on('process:unregister', (event, { sessionId, pid }) => {
+  const key = `${sessionId}-${pid}`;
+  spawnedProcesses.delete(key);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('process:updated');
+  }
+});
+
+// Get all tracked processes
+ipcMain.handle('process:get-tracked', () => {
+  return Array.from(spawnedProcesses.values());
+});
+
+// Scan for listening ports (uses lsof on macOS/Linux)
+ipcMain.handle('process:scan-ports', async () => {
+  return new Promise((resolve) => {
+    const cmd = process.platform === 'darwin' || process.platform === 'linux'
+      ? 'lsof -i -P -n | grep LISTEN'
+      : 'netstat -an | findstr LISTENING';
+
+    exec(cmd, (error, stdout) => {
+      if (error) {
+        resolve([]);
+        return;
+      }
+
+      const ports = [];
+      const lines = stdout.trim().split('\n').filter(Boolean);
+
+      for (const line of lines) {
+        try {
+          if (process.platform === 'darwin' || process.platform === 'linux') {
+            // Parse lsof output: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
+            const parts = line.split(/\s+/);
+            if (parts.length >= 9) {
+              const command = parts[0];
+              const pid = parseInt(parts[1], 10);
+              const name = parts[8]; // e.g., *:3000 or 127.0.0.1:8080
+              const portMatch = name.match(/:(\d+)$/);
+              if (portMatch) {
+                const port = parseInt(portMatch[1], 10);
+                // Filter out common system ports
+                if (port > 1024) {
+                  ports.push({
+                    port,
+                    pid,
+                    command,
+                    address: name,
+                  });
+                }
+              }
+            }
+          }
+        } catch (e) {
+          // Skip malformed lines
+        }
+      }
+
+      // Dedupe by port
+      const seen = new Set();
+      const unique = ports.filter(p => {
+        if (seen.has(p.port)) return false;
+        seen.add(p.port);
+        return true;
+      });
+
+      resolve(unique.sort((a, b) => a.port - b.port));
+    });
+  });
+});
+
+// Kill a process by PID
+ipcMain.handle('process:kill', async (event, pid) => {
+  return new Promise((resolve) => {
+    const cmd = process.platform === 'win32' ? `taskkill /PID ${pid} /F` : `kill -9 ${pid}`;
+    exec(cmd, (error) => {
+      if (error) {
+        resolve({ success: false, error: error.message });
+      } else {
+        // Remove from tracked if it was tracked
+        for (const [key, proc] of spawnedProcesses.entries()) {
+          if (proc.pid === pid) {
+            spawnedProcesses.delete(key);
+            break;
+          }
+        }
+        resolve({ success: true });
+      }
+    });
+  });
+});
+
+// Get running Claude sessions info
+ipcMain.handle('process:get-claude-sessions', () => {
+  const sessions = [];
+  for (const [id, session] of claudeSessions.entries()) {
+    sessions.push({
+      id,
+      pid: session.pty.pid,
+      cwd: session.cwd,
+      createdAt: session.createdAt,
+    });
+  }
+  return sessions;
+});
+
+// Get child processes (sub-agents) of Claude sessions
+ipcMain.handle('process:get-subagents', async () => {
+  return new Promise((resolve) => {
+    // Get all PIDs of active Claude sessions
+    const claudePids = Array.from(claudeSessions.values()).map(s => s.pty.pid);
+
+    if (claudePids.length === 0) {
+      resolve([]);
+      return;
+    }
+
+    // Use ps to find all processes and their parents, then filter
+    const cmd = process.platform === 'darwin' || process.platform === 'linux'
+      ? 'ps -eo pid,ppid,command'
+      : 'wmic process get processid,parentprocessid,commandline';
+
+    exec(cmd, (error, stdout) => {
+      if (error) {
+        resolve([]);
+        return;
+      }
+
+      const subagents = [];
+      const lines = stdout.trim().split('\n').slice(1); // Skip header
+
+      // Build a map of pid -> process info
+      const processes = new Map();
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 3) {
+          const pid = parseInt(parts[0], 10);
+          const ppid = parseInt(parts[1], 10);
+          const command = parts.slice(2).join(' ');
+          if (!isNaN(pid) && !isNaN(ppid)) {
+            processes.set(pid, { pid, ppid, command });
+          }
+        }
+      }
+
+      // Find all descendants of Claude sessions (recursive)
+      const findDescendants = (parentPid, depth = 0) => {
+        const children = [];
+        for (const [pid, proc] of processes.entries()) {
+          if (proc.ppid === parentPid) {
+            // Check if it looks like a sub-agent or interesting process
+            const isSubagent = proc.command.includes('claude') ||
+                               proc.command.includes('node') ||
+                               proc.command.includes('python') ||
+                               proc.command.includes('npm') ||
+                               proc.command.includes('npx');
+
+            children.push({
+              ...proc,
+              parentClaudePid: parentPid,
+              depth,
+              isSubagent,
+            });
+
+            // Recursively find children of this process
+            if (depth < 5) { // Limit depth to avoid infinite loops
+              children.push(...findDescendants(pid, depth + 1));
+            }
+          }
+        }
+        return children;
+      };
+
+      // Find descendants for each Claude session
+      for (const claudePid of claudePids) {
+        const descendants = findDescendants(claudePid);
+        subagents.push(...descendants);
+      }
+
+      resolve(subagents);
+    });
+  });
 });

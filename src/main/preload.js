@@ -54,4 +54,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPromptHistory: (options) => ipcRenderer.invoke('history:get-prompts', options),
   getSessionHistory: (sessionId) => ipcRenderer.invoke('history:get-session', sessionId),
   getHistoryPath: () => ipcRenderer.invoke('history:get-path'),
+
+  // Process and port tracking
+  registerProcess: (data) => ipcRenderer.send('process:register', data),
+  unregisterProcess: (data) => ipcRenderer.send('process:unregister', data),
+  getTrackedProcesses: () => ipcRenderer.invoke('process:get-tracked'),
+  scanPorts: () => ipcRenderer.invoke('process:scan-ports'),
+  killProcess: (pid) => ipcRenderer.invoke('process:kill', pid),
+  getClaudeSessions: () => ipcRenderer.invoke('process:get-claude-sessions'),
+  getSubagents: () => ipcRenderer.invoke('process:get-subagents'),
+  onProcessUpdated: (callback) => {
+    const subscription = () => callback();
+    ipcRenderer.on('process:updated', subscription);
+    return () => ipcRenderer.removeListener('process:updated', subscription);
+  },
 });
