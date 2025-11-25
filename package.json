@@ -1,0 +1,72 @@
+{
+  "name": "better-claude-code",
+  "version": "1.0.0",
+  "description": "A better interface for Claude Code",
+  "main": "src/main/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:vite\" \"npm run dev:electron\"",
+    "dev:vite": "vite",
+    "dev:electron": "wait-on http://localhost:5173 && NODE_ENV=development electron .",
+    "build": "vite build && electron-builder",
+    "start": "npm run dev",
+    "rebuild": "npx @electron/rebuild -f -w node-pty"
+  },
+  "keywords": [
+    "claude",
+    "ai",
+    "terminal",
+    "electron"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "concurrently": "^9.2.1",
+    "electron": "^39.2.3",
+    "marked": "^17.0.1",
+    "node-pty": "^1.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-markdown": "^10.1.0",
+    "wait-on": "^9.0.3"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.1",
+    "@vitejs/plugin-react": "^5.1.1",
+    "electron-builder": "^26.0.12",
+    "electron-rebuild": "^3.2.9",
+    "vite": "^7.2.4"
+  },
+  "build": {
+    "appId": "com.betterclaudecode.app",
+    "productName": "Better Claude Code",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "src/main/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    }
+  }
+}
