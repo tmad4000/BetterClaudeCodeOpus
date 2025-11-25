@@ -69,7 +69,7 @@ ipcMain.handle('terminal:create', (event, options = {}) => {
     name: 'xterm-256color',
     cols: options.cols || 80,
     rows: options.rows || 24,
-    cwd: options.cwd || process.env.HOME,
+    cwd: options.cwd || `${process.env.HOME}/code`,
     env: { ...process.env, TERM: 'xterm-256color' }
   });
 
@@ -117,7 +117,7 @@ ipcMain.on('terminal:kill', (event, id) => {
 
 ipcMain.handle('claude:create-session', (event, options = {}) => {
   const id = ++claudeSessionIdCounter;
-  const cwd = options.cwd || process.env.HOME;
+  const cwd = options.cwd || `${process.env.HOME}/code`;
   const permissionMode = options.permissionMode || 'default';
 
   // Build args based on permission mode
