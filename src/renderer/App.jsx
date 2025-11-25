@@ -508,10 +508,25 @@ function AppContent() {
   const [viewMode, setViewMode] = useState('terminal'); // 'terminal' or 'pretty'
   const [showHistory, setShowHistory] = useState(false);
 
+  const { createSession, currentCwd } = useClaudeSession();
+
   const handleResizeStart = useCallback((e) => {
     e.preventDefault();
     setIsResizing(true);
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Command/Control + T for new session
+      if ((e.metaKey || e.ctrlKey) && e.key === 't') {
+        e.preventDefault();
+        createSession({ cwd: currentCwd });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [createSession, currentCwd]);
 
   useEffect(() => {
     if (!isResizing) return;

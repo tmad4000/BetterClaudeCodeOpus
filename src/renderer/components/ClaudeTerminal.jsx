@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useClaudeSession } from '../context/ClaudeSessionContext';
+import { RefreshCw } from './Icons';
 
 let XTerminal;
 let FitAddon;
@@ -8,8 +9,9 @@ export default function ClaudeTerminal({ sessionId, isActive, onReady }) {
   const containerRef = useRef(null);
   const xtermRef = useRef(null);
   const fitAddonRef = useRef(null);
-  const { setTerminalRef } = useClaudeSession();
+  const { setTerminalRef, createSession, currentCwd } = useClaudeSession();
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isExited, setIsExited] = useState(false);
 
   useEffect(() => {
     const loadXterm = async () => {
@@ -91,6 +93,7 @@ export default function ClaudeTerminal({ sessionId, isActive, onReady }) {
 
           const unsubscribeExit = window.electronAPI.onClaudeExit(sessionId, (exitCode) => {
             term.write(`\r\n\x1b[90m[Session ended with code ${exitCode}]\x1b[0m\r\n`);
+            setIsExited(true);
           });
 
           // Handle resize
@@ -143,7 +146,40 @@ export default function ClaudeTerminal({ sessionId, isActive, onReady }) {
         backgroundColor: '#0d1117',
         padding: '8px',
         boxSizing: 'border-box',
+        position: 'relative',
       }}
-    />
+    >
+      {isExited && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 24,
+            right: 24,
+            zIndex: 10,
+          }}
+        >
+          <button
+            onClick={() => createSession({ cwd: currentCwd })}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 16px',
+              background: 'var(--accent-primary)',
+              color: 'white',
+              border: 'none',
+              borderRadius: 'var(--radius-md)',
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
+              boxShadow: 'var(--shadow-lg)',
+            }}
+          >
+            <RefreshCw style={{ width: 16, height: 16 }} />
+            Start New Session
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
