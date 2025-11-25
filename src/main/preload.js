@@ -1,38 +1,22 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  // Terminal operations
-  createTerminal: (options) => ipcRenderer.invoke('terminal:create', options),
-  sendTerminalInput: (id, data) => ipcRenderer.send('terminal:input', { id, data }),
-  resizeTerminal: (id, cols, rows) => ipcRenderer.send('terminal:resize', { id, cols, rows }),
-  killTerminal: (id) => ipcRenderer.send('terminal:kill', id),
-  onTerminalData: (id, callback) => {
-    const channel = `terminal:data:${id}`;
+  // Session operations (Unified)
+  createSession: (options) => ipcRenderer.invoke('session:create', options),
+  sendSessionInput: (id, data) => ipcRenderer.send('session:input', { id, data }),
+  resizeSession: (id, cols, rows) => ipcRenderer.send('session:resize', { id, cols, rows }),
+  killSession: (id) => ipcRenderer.send('session:kill', id),
+  interruptSession: (id) => ipcRenderer.send('session:interrupt', id),
+  
+  onSessionData: (id, callback) => {
+    const channel = `session:data:${id}`;
     const subscription = (event, data) => callback(data);
     ipcRenderer.on(channel, subscription);
     return () => ipcRenderer.removeListener(channel, subscription);
   },
-  onTerminalExit: (id, callback) => {
-    const channel = `terminal:exit:${id}`;
-    const subscription = (event, exitCode) => callback(exitCode);
-    ipcRenderer.on(channel, subscription);
-    return () => ipcRenderer.removeListener(channel, subscription);
-  },
-
-  // Claude session operations
-  createClaudeSession: (options) => ipcRenderer.invoke('claude:create-session', options),
-  sendClaudeMessage: (id, message) => ipcRenderer.send('claude:send-message', { id, message }),
-  resizeClaudeSession: (id, cols, rows) => ipcRenderer.send('claude:resize', { id, cols, rows }),
-  killClaudeSession: (id) => ipcRenderer.send('claude:kill', id),
-  interruptClaude: (id) => ipcRenderer.send('claude:interrupt', id),
-  onClaudeOutput: (id, callback) => {
-    const channel = `claude:raw-output:${id}`;
-    const subscription = (event, data) => callback(data);
-    ipcRenderer.on(channel, subscription);
-    return () => ipcRenderer.removeListener(channel, subscription);
-  },
-  onClaudeExit: (id, callback) => {
-    const channel = `claude:exit:${id}`;
+  
+  onSessionExit: (id, callback) => {
+    const channel = `session:exit:${id}`;
     const subscription = (event, exitCode) => callback(exitCode);
     ipcRenderer.on(channel, subscription);
     return () => ipcRenderer.removeListener(channel, subscription);

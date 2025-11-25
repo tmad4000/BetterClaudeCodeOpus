@@ -3,8 +3,8 @@ import React, { createContext, useContext, useState, useCallback, useRef } from 
 const TerminalContext = createContext(null);
 
 export function TerminalProvider({ children }) {
-  const [terminals, setTerminals] = useState([]);
-  const [activeTerminalId, setActiveTerminalId] = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState(null);
   const terminalRefs = useRef(new Map());
 
   const createTerminal = useCallback(async (options = {}) => {
@@ -14,70 +14,59 @@ export function TerminalProvider({ children }) {
     }
 
     try {
-      const { id, pid } = await window.electronAPI.createTerminal(options);
-      const newTerminal = {
+      const type = options.type || 'shell';
+      const { id, pid, cwd } = await window.electronAPI.createSession({
+        ...options,
+        type,
+      });
+
+      const newSession = {
         id,
         pid,
-        title: options.title || `Terminal ${terminals.length + 1}`,
-        cwd: options.cwd || process.env.HOME,
-        type: 'shell',
+        title: options.title || (type === 'claude' ? 'Claude Code' : `Terminal ${sessions.length + 1}`),
+        cwd: cwd || options.cwd || process.env.HOME,
+        type,
+        createdAt: Date.now(),
+        // Default permission mode for Claude sessions
+        permissionMode: options.permissionMode || 'default', 
       };
 
-      setTerminals((prev) => [...prev, newTerminal]);
-      setActiveTerminalId(id);
-      return newTerminal;
+      setSessions((prev) => [...prev, newSession]);
+      setActiveSessionId(id);
+      return newSession;
     } catch (error) {
-      console.error('Failed to create terminal:', error);
+      console.error('Failed to create session:', error);
       return null;
     }
-  }, [terminals.length]);
-
-  const createClaudeTerminal = useCallback(async (options = {}) => {
-    if (!window.electronAPI) {
-      console.warn('Electron API not available');
-      return null;
-    }
-
-    try {
-      const { id, pid } = await window.electronAPI.startClaude(options);
-      const newTerminal = {
-        id,
-        pid,
-        title: 'Claude Code',
-        cwd: options.cwd || process.env.HOME,
-        type: 'claude',
-      };
-
-      setTerminals((prev) => [...prev, newTerminal]);
-      setActiveTerminalId(id);
-      return newTerminal;
-    } catch (error) {
-      console.error('Failed to start Claude:', error);
-      return null;
-    }
-  }, []);
+  }, [sessions.length]);
 
   const closeTerminal = useCallback((id) => {
     if (window.electronAPI) {
-      window.electronAPI.killTerminal(id);
+      window.electronAPI.killSession(id);
     }
 
-    setTerminals((prev) => {
-      const newTerminals = prev.filter((t) => t.id !== id);
-      if (activeTerminalId === id && newTerminals.length > 0) {
-        setActiveTerminalId(newTerminals[newTerminals.length - 1].id);
-      } else if (newTerminals.length === 0) {
-        setActiveTerminalId(null);
+    setSessions((prev) => {
+      const newSessions = prev.filter((t) => t.id !== id);
+      if (activeSessionId === id && newSessions.length > 0) {
+        setActiveSessionId(newSessions[newSessions.length - 1].id);
+      } else if (newSessions.length === 0) {
+        setActiveSessionId(null);
       }
-      return newTerminals;
+      return newSessions;
     });
 
     terminalRefs.current.delete(id);
-  }, [activeTerminalId]);
+  }, [activeSessionId]);
 
   const renameTerminal = useCallback((id, title) => {
-    setTerminals((prev) =>
+    setSessions((prev) =>
       prev.map((t) => (t.id === id ? { ...t, title } : t))
+    );
+  }, []);
+  
+  const updateSession = useCallback((id, updates) => {
+    setSessions((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
     );
   }, []);
 
@@ -94,13 +83,13 @@ export function TerminalProvider({ children }) {
   }, []);
 
   const value = {
-    terminals,
-    activeTerminalId,
-    setActiveTerminalId,
+    sessions,
+    activeSessionId,
+    setActiveSessionId,
     createTerminal,
-    createClaudeTerminal,
     closeTerminal,
     renameTerminal,
+    updateSession,
     setTerminalRef,
     getTerminalRef,
   };

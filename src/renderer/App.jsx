@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { ClaudeSessionProvider, useClaudeSession, PERMISSION_MODES } from './context/ClaudeSessionContext';
-import { TerminalProvider, useTerminal } from './context/TerminalContext';
-import ClaudeTerminal from './components/ClaudeTerminal';
+import React, { useState, useEffect } from 'react';
+import { TerminalProvider, useTerminal, PERMISSION_MODES } from './context/TerminalContext';
 import TerminalInstance from './components/TerminalInstance';
-import TerminalPanel from './components/TerminalPanel';
 import ProcessTracker from './components/ProcessTracker';
 import PrettyView from './components/PrettyView';
 import PromptHistory from './components/PromptHistory';
+import ClaudeTerminal from './components/ClaudeTerminal';
 import {
   Plus, X, Terminal, Sparkles, Folder,
   Shield, ShieldCheck, Zap, Clock, Code, AlertCircle
@@ -94,40 +92,28 @@ function PermissionModeSelector({ currentMode, onSelect, onClose }) {
   );
 }
 
-function Sidebar({ onShowHistory, activeTab, onTabSelect }) {
+function Sidebar({ onShowHistory }) {
   const {
     sessions,
+    activeSessionId,
+    setActiveSessionId,
     currentCwd,
     permissionMode,
     setPermissionMode,
-    createSession,
-    closeSession,
-    selectDirectory,
-  } = useClaudeSession();
-
-  const {
-    terminals,
     createTerminal,
     closeTerminal,
+    selectDirectory,
   } = useTerminal();
 
   const [showModeSelector, setShowModeSelector] = useState(false);
   const [showProcessTracker, setShowProcessTracker] = useState(false);
 
-  // Combine sessions and terminals into a single list
-  const allTabs = [
-    ...sessions.map(s => ({ ...s, type: 'claude' })),
-    ...terminals.map(t => ({ ...t, type: 'terminal', createdAt: Date.now() })) // Terminals don't have createdAt yet, mock it
-  ].sort((a, b) => a.createdAt - b.createdAt);
-
   const handleNewTerminal = async () => {
-    const term = await createTerminal({ cwd: currentCwd });
-    if (term) onTabSelect({ type: 'terminal', id: term.id });
+    await createTerminal({ type: 'shell', cwd: currentCwd });
   };
   
   const handleNewClaude = async () => {
-      const session = await createSession({ cwd: currentCwd });
-      if (session) onTabSelect({ type: 'claude', id: session.id });
+      await createTerminal({ type: 'claude', cwd: currentCwd });
   }
 
   const handleSelectDirectory = async () => {
@@ -189,7 +175,7 @@ function Sidebar({ onShowHistory, activeTab, onTabSelect }) {
           </button>
         </div>
 
-        {/* Permission Mode Selector - Only relevant for Claude */}
+        {/* Permission Mode Selector - Affects new Claude sessions */}
         <div style={{ padding: '0 8px', marginBottom: 16, position: 'relative' }}>
           <div
             onClick={() => setShowModeSelector(!showModeSelector)}
@@ -227,18 +213,18 @@ function Sidebar({ onShowHistory, activeTab, onTabSelect }) {
         </div>
 
         <div className="sidebar-section-title">Open Tabs</div>
-        {allTabs.length === 0 ? (
+        {sessions.length === 0 ? (
           <div style={{ padding: '12px 20px', color: 'var(--text-muted)', fontSize: 13 }}>
             No open tabs.
           </div>
         ) : (
-          allTabs.map((tab) => {
-             const isActive = activeTab && activeTab.type === tab.type && activeTab.id === tab.id;
+          sessions.map((tab) => {
+             const isActive = activeSessionId === tab.id;
              return (
             <div
-              key={`${tab.type}-${tab.id}`}
+              key={tab.id}
               className={`sidebar-item ${isActive ? 'active' : ''}`}
-              onClick={() => onTabSelect({ type: tab.type, id: tab.id })}
+              onClick={() => setActiveSessionId(tab.id)}
             >
               <div style={{ color: tab.type === 'claude' ? PERMISSION_MODES[tab.permissionMode || 'default'].color : 'var(--text-secondary)' }}>
                 {tab.type === 'claude' ? (
@@ -256,8 +242,7 @@ function Sidebar({ onShowHistory, activeTab, onTabSelect }) {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (tab.type === 'claude') closeSession(tab.id);
-                  else closeTerminal(tab.id);
+                  closeTerminal(tab.id);
                 }}
                 style={{
                   background: 'transparent',
@@ -314,32 +299,26 @@ function Sidebar({ onShowHistory, activeTab, onTabSelect }) {
   );
 }
 
-function MainArea({ activeTab, viewMode, setViewMode }) {
-  const { sessions } = useClaudeSession();
-  const { terminals } = useTerminal();
+function MainArea({ viewMode, setViewMode }) {
+  const { sessions, activeSessionId } = useTerminal();
 
-  // Find the active object
-  let activeObject = null;
-  if (activeTab?.type === 'claude') {
-      activeObject = sessions.find(s => s.id === activeTab.id);
-  } else if (activeTab?.type === 'terminal') {
-      activeObject = terminals.find(t => t.id === activeTab.id);
-  }
+  // Find the active session
+  const activeSession = sessions.find(s => s.id === activeSessionId);
 
   return (
     <div className="main-content" style={{ display: 'flex', flexDirection: 'column' }}>
       {/* Top bar */}
       <div className="top-bar">
         <div className="top-bar-tabs">
-          {activeObject ? (
+          {activeSession ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ fontSize: 14, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
-                {activeTab.type === 'claude' ? (
+                {activeSession.type === 'claude' ? (
                     <Sparkles style={{ width: 16, height: 16, color: 'var(--accent-primary)' }} />
                 ) : (
                     <Terminal style={{ width: 16, height: 16, color: 'var(--text-secondary)' }} />
                 )}
-                {activeObject.title}
+                {activeSession.title}
               </span>
               <span style={{
                 fontSize: 13,
@@ -354,7 +333,7 @@ function MainArea({ activeTab, viewMode, setViewMode }) {
                 borderRadius: 'var(--radius-sm)',
               }}>
                 <Folder style={{ width: 14, height: 14 }} />
-                {activeObject.cwd || '~/code'}
+                {activeSession.cwd || '~/code'}
               </span>
             </div>
           ) : (
@@ -364,7 +343,7 @@ function MainArea({ activeTab, viewMode, setViewMode }) {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* View mode toggle - Only for Claude sessions */}
-          {activeTab?.type === 'claude' && (
+          {activeSession?.type === 'claude' && (
             <div
               style={{
                 display: 'flex',
@@ -423,7 +402,7 @@ function MainArea({ activeTab, viewMode, setViewMode }) {
           position: 'relative'
         }}
       >
-        {!activeTab ? (
+        {!activeSession ? (
              <div className="empty-state">
                 <Terminal className="empty-state-icon" />
                 <div className="empty-state-title">No Open Tabs</div>
@@ -435,27 +414,18 @@ function MainArea({ activeTab, viewMode, setViewMode }) {
             <>
             {/* Render ALL sessions/terminals but hide inactive ones to preserve state */}
             {sessions.map(session => (
-                <div key={`claude-${session.id}`} style={{ display: activeTab.type === 'claude' && activeTab.id === session.id ? 'block' : 'none', height: '100%' }}>
-                     {viewMode === 'terminal' ? (
-                        <ClaudeTerminal
-                          sessionId={session.id}
-                          isActive={activeTab.type === 'claude' && activeTab.id === session.id}
-                        />
-                      ) : (
+                <div key={session.id} style={{ display: activeSessionId === session.id ? 'block' : 'none', height: '100%' }}>
+                     {session.type === 'claude' && viewMode === 'pretty' ? (
                         <PrettyView
                           sessionId={session.id}
-                          isActive={activeTab.type === 'claude' && activeTab.id === session.id}
+                          isActive={activeSessionId === session.id}
+                        />
+                      ) : (
+                        <TerminalInstance
+                          terminal={session}
+                          isActive={activeSessionId === session.id}
                         />
                       )}
-                </div>
-            ))}
-            
-            {terminals.map(term => (
-                <div key={`term-${term.id}`} style={{ display: activeTab.type === 'terminal' && activeTab.id === term.id ? 'block' : 'none', height: '100%' }}>
-                     <TerminalInstance
-                        terminal={term}
-                        isActive={activeTab.type === 'terminal' && activeTab.id === term.id}
-                     />
                 </div>
             ))}
             </>
@@ -463,7 +433,7 @@ function MainArea({ activeTab, viewMode, setViewMode }) {
       </div>
 
       {/* Hint bar */}
-      {activeObject && (
+      {activeSession && (
         <div
           style={{
             padding: '8px 16px',
@@ -476,7 +446,7 @@ function MainArea({ activeTab, viewMode, setViewMode }) {
             gap: 16,
           }}
         >
-          <span>{activeTab.type === 'claude' ? 'Claude Session' : 'Standard Terminal'}</span>
+          <span>{activeSession.type === 'claude' ? 'Claude Session' : 'Standard Terminal'}</span>
           <span style={{ color: 'var(--text-muted)' }}>|</span>
           <span><kbd style={{ background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: 4 }}>Cmd+T</kbd> New Terminal</span>
         </div>
@@ -486,23 +456,19 @@ function MainArea({ activeTab, viewMode, setViewMode }) {
 }
 
 function AppContent() {
-  const [activeTab, setActiveTab] = useState(null);
   const [viewMode, setViewMode] = useState('terminal'); // 'terminal' or 'pretty'
   const [showHistory, setShowHistory] = useState(false);
 
-  const { createSession, sessions, currentCwd, showCwdWarning, setShowCwdWarning } = useClaudeSession();
-  const { createTerminal, terminals } = useTerminal();
+  const { createTerminal, sessions, currentCwd, showCwdWarning, setShowCwdWarning } = useTerminal();
   const [hasInitialized, setHasInitialized] = useState(false);
 
   // Initialize: Start a Claude session if none exist
   useEffect(() => {
       if (!hasInitialized && sessions.length === 0 && currentCwd) {
-          createSession({ cwd: currentCwd }).then(session => {
-              if (session) setActiveTab({ type: 'claude', id: session.id });
-          });
+          createTerminal({ type: 'claude', cwd: currentCwd });
           setHasInitialized(true);
       }
-  }, [hasInitialized, sessions.length, createSession, currentCwd]);
+  }, [hasInitialized, sessions.length, createTerminal, currentCwd]);
 
   // Handle global shortcuts
   useEffect(() => {
@@ -510,9 +476,7 @@ function AppContent() {
       // Command/Control + T for new STANDARD terminal
       if ((e.metaKey || e.ctrlKey) && e.key === 't') {
         e.preventDefault();
-        createTerminal({ cwd: currentCwd }).then(term => {
-            if (term) setActiveTab({ type: 'terminal', id: term.id });
-        });
+        createTerminal({ type: 'shell', cwd: currentCwd });
       }
     };
 
@@ -525,8 +489,6 @@ function AppContent() {
       <div className="titlebar-drag-region" />
       <Sidebar
         onShowHistory={() => setShowHistory(true)}
-        activeTab={activeTab}
-        onTabSelect={setActiveTab}
       />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {showCwdWarning && (
@@ -560,7 +522,6 @@ function AppContent() {
             </div>
         )}
         <MainArea
-            activeTab={activeTab}
             viewMode={viewMode}
             setViewMode={setViewMode}
         />
@@ -578,10 +539,8 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ClaudeSessionProvider>
-      <TerminalProvider>
-        <AppContent />
-      </TerminalProvider>
-    </ClaudeSessionProvider>
+    <TerminalProvider>
+      <AppContent />
+    </TerminalProvider>
   );
 }

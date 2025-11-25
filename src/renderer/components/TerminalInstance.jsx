@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTerminal } from '../context/TerminalContext';
+import { RefreshCw } from './Icons';
 
 // Lazy load xterm to avoid SSR issues
 let XTerminal;
@@ -9,7 +10,8 @@ export default function TerminalInstance({ terminal, isActive }) {
   const containerRef = useRef(null);
   const xtermRef = useRef(null);
   const fitAddonRef = useRef(null);
-  const { setTerminalRef } = useTerminal();
+  const { setTerminalRef, createTerminal } = useTerminal();
+  const [isExited, setIsExited] = useState(false);
 
   useEffect(() => {
     // Dynamic import for xterm
@@ -58,7 +60,8 @@ export default function TerminalInstance({ terminal, isActive }) {
           lineHeight: 1.4,
           cursorBlink: true,
           cursorStyle: 'bar',
-          scrollback: 10000,
+          scrollback: 50000,
+          allowProposedApi: true,
         });
 
         const fitAddon = new FitAddon();
@@ -73,24 +76,31 @@ export default function TerminalInstance({ terminal, isActive }) {
 
         // Set up data listeners
         if (window.electronAPI) {
-          const unsubscribeData = window.electronAPI.onTerminalData(terminal.id, (data) => {
+          const unsubscribeData = window.electronAPI.onSessionData(terminal.id, (data) => {
             term.write(data);
+            // Log to session history for Claude sessions
+            if (terminal.type === 'claude') {
+               window.electronAPI.logSessionOutput(terminal.id, data);
+            }
           });
 
-          const unsubscribeExit = window.electronAPI.onTerminalExit(terminal.id, (exitCode) => {
+          const unsubscribeExit = window.electronAPI.onSessionExit(terminal.id, (exitCode) => {
             term.write(`\r\n\x1b[90mProcess exited with code ${exitCode}\x1b[0m\r\n`);
+            if (terminal.type === 'claude') {
+                setIsExited(true);
+            }
           });
 
           // Send input to backend
           term.onData((data) => {
-            window.electronAPI.sendTerminalInput(terminal.id, data);
+            window.electronAPI.sendSessionInput(terminal.id, data);
           });
 
           // Handle resize
           const resizeObserver = new ResizeObserver(() => {
             fitAddon.fit();
             if (window.electronAPI && term.cols && term.rows) {
-              window.electronAPI.resizeTerminal(terminal.id, term.cols, term.rows);
+              window.electronAPI.resizeSession(terminal.id, term.cols, term.rows);
             }
           });
 
@@ -105,19 +115,14 @@ export default function TerminalInstance({ terminal, isActive }) {
             term.dispose();
           };
         } else {
-          // Demo mode - show welcome message
-          term.write('\x1b[1;34m╭─────────────────────────────────────────╮\x1b[0m\r\n');
-          term.write('\x1b[1;34m│\x1b[0m   \x1b[1;36mBetter Claude Code Terminal\x1b[0m          \x1b[1;34m│\x1b[0m\r\n');
-          term.write('\x1b[1;34m╰─────────────────────────────────────────╯\x1b[0m\r\n\r\n');
-          term.write('\x1b[90mElectron API not available in browser preview.\x1b[0m\r\n');
-          term.write('\x1b[90mRun with `npm start` to enable terminal.\x1b[0m\r\n\r\n');
-          term.write('\x1b[32m➜\x1b[0m \x1b[34m~/projects\x1b[0m ')
+          // Demo mode
+          term.write('\x1b[1;34mBetter Terminal\x1b[0m\r\n');
         }
       }
     };
 
     loadXterm();
-  }, [terminal.id, setTerminalRef]);
+  }, [terminal.id, setTerminalRef, terminal.type]);
 
   useEffect(() => {
     if (isActive && fitAddonRef.current) {
@@ -127,6 +132,16 @@ export default function TerminalInstance({ terminal, isActive }) {
       }, 0);
     }
   }, [isActive]);
+
+  const handleRestart = async () => {
+      // Create new session with same options
+      await createTerminal({
+          type: 'claude',
+          cwd: terminal.cwd,
+          permissionMode: terminal.permissionMode
+      });
+      // Note: Ideally we would replace the current tab, but appending is safer for now.
+  };
 
   return (
     <div
@@ -138,7 +153,40 @@ export default function TerminalInstance({ terminal, isActive }) {
         display: isActive ? 'block' : 'none',
         padding: '8px',
         boxSizing: 'border-box',
+        position: 'relative'
       }}
-    />
+    >
+        {isExited && terminal.type === 'claude' && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 24,
+            right: 24,
+            zIndex: 10,
+          }}
+        >
+          <button
+            onClick={handleRestart}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 16px',
+              background: 'var(--accent-primary)',
+              color: 'white',
+              border: 'none',
+              borderRadius: 'var(--radius-md)',
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
+              boxShadow: 'var(--shadow-lg)',
+            }}
+          >
+            <RefreshCw style={{ width: 16, height: 16 }} />
+            Start New Session
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

@@ -7,10 +7,8 @@ const { exec } = require('child_process');
 const isDev = process.env.NODE_ENV === 'development';
 
 let mainWindow;
-const terminals = new Map();
-const claudeSessions = new Map();
-let terminalIdCounter = 0;
-let claudeSessionIdCounter = 0;
+const sessions = new Map();
+let sessionIdCounter = 0;
 
 // Sessions storage path
 const getSessionsPath = () => {
@@ -53,10 +51,8 @@ function createWindow() {
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
-  terminals.forEach((term) => term.pty.kill());
-  terminals.clear();
-  claudeSessions.forEach((session) => session.pty.kill());
-  claudeSessions.clear();
+  sessions.forEach((session) => session.pty.kill());
+  sessions.clear();
 
   if (process.platform !== 'darwin') {
     app.quit();
@@ -69,145 +65,105 @@ app.on('activate', () => {
   }
 });
 
-// ============ Terminal IPC handlers ============
-ipcMain.handle('terminal:create', (event, options = {}) => {
-  const id = ++terminalIdCounter;
-  const shell = process.env.SHELL || '/bin/zsh';
+// ============ Unified Session IPC handlers ============
 
-  const defaultCwd = determineDefaultCwd();
-  const term = pty.spawn(shell, [], {
-    name: 'xterm-256color',
-    cols: options.cols || 80,
-    rows: options.rows || 24,
-    cwd: options.cwd || defaultCwd.path,
-    env: { ...process.env, TERM: 'xterm-256color' }
-  });
-
-  terminals.set(id, { pty: term, type: 'shell' });
-
-  term.onData((data) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(`terminal:data:${id}`, data);
-    }
-  });
-
-  term.onExit(({ exitCode }) => {
-    terminals.delete(id);
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(`terminal:exit:${id}`, exitCode);
-    }
-  });
-
-  return { id, pid: term.pid };
-});
-
-ipcMain.on('terminal:input', (event, { id, data }) => {
-  const term = terminals.get(id);
-  if (term) {
-    term.pty.write(data);
-  }
-});
-
-ipcMain.on('terminal:resize', (event, { id, cols, rows }) => {
-  const term = terminals.get(id);
-  if (term) {
-    term.pty.resize(cols, rows);
-  }
-});
-
-ipcMain.on('terminal:kill', (event, id) => {
-  const term = terminals.get(id);
-  if (term) {
-    term.pty.kill();
-    terminals.delete(id);
-  }
-});
-
-// ============ Claude Session IPC handlers ============
-
-ipcMain.handle('claude:create-session', (event, options = {}) => {
-  const id = ++claudeSessionIdCounter;
+ipcMain.handle('session:create', (event, options = {}) => {
+  const id = ++sessionIdCounter;
   const defaultCwd = determineDefaultCwd();
   const cwd = options.cwd || defaultCwd.path;
+  const type = options.type || 'shell';
   const permissionMode = options.permissionMode || 'default';
 
-  // Build args based on permission mode
-  const args = [];
-  if (permissionMode === 'yolo') {
-    args.push('--dangerously-skip-permissions');
-  }
+  let term;
+  let args = [];
 
-  // Spawn claude
-  const term = pty.spawn('claude', args, {
-    name: 'xterm-256color',
-    cols: options.cols || 120,
-    rows: options.rows || 40,
-    cwd: cwd,
-    env: {
-      ...process.env,
-      TERM: 'xterm-256color',
-      FORCE_COLOR: '1'
+  if (type === 'claude') {
+    // Build args based on permission mode
+    if (permissionMode === 'yolo') {
+      args.push('--dangerously-skip-permissions');
     }
-  });
+    
+    term = pty.spawn('claude', args, {
+      name: 'xterm-256color',
+      cols: options.cols || 120,
+      rows: options.rows || 40,
+      cwd: cwd,
+      env: {
+        ...process.env,
+        TERM: 'xterm-256color',
+        FORCE_COLOR: '1'
+      }
+    });
+  } else {
+    // Standard shell
+    const shell = process.env.SHELL || '/bin/zsh';
+    term = pty.spawn(shell, [], {
+      name: 'xterm-256color',
+      cols: options.cols || 80,
+      rows: options.rows || 24,
+      cwd: cwd,
+      env: { ...process.env, TERM: 'xterm-256color' }
+    });
+  }
 
   const session = {
     id,
     pty: term,
+    type,
     cwd,
     buffer: '',
     messages: [],
     createdAt: Date.now()
   };
 
-  claudeSessions.set(id, session);
+  sessions.set(id, session);
 
-  // Stream raw terminal data for the embedded terminal view
   term.onData((data) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      // Send raw data for terminal rendering
-      mainWindow.webContents.send(`claude:raw-output:${id}`, data);
-
-      // Also accumulate for parsing
-      session.buffer += data;
+      mainWindow.webContents.send(`session:data:${id}`, data);
+      
+      // Accumulate buffer for Claude sessions (for parsing/logging)
+      if (type === 'claude') {
+        session.buffer += data;
+      }
     }
   });
 
   term.onExit(({ exitCode }) => {
-    claudeSessions.delete(id);
+    sessions.delete(id);
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(`claude:exit:${id}`, exitCode);
+      mainWindow.webContents.send(`session:exit:${id}`, exitCode);
     }
   });
 
-  return { id, pid: term.pid, cwd };
+  return { id, pid: term.pid, cwd, type };
 });
 
-ipcMain.on('claude:send-message', (event, { id, message }) => {
-  const session = claudeSessions.get(id);
+ipcMain.on('session:input', (event, { id, data }) => {
+  const session = sessions.get(id);
   if (session) {
-    // Write raw input to the pty (terminal handles its own line editing)
-    session.pty.write(message);
+    session.pty.write(data);
   }
 });
 
-ipcMain.on('claude:resize', (event, { id, cols, rows }) => {
-  const session = claudeSessions.get(id);
+ipcMain.on('session:resize', (event, { id, cols, rows }) => {
+  const session = sessions.get(id);
   if (session) {
     session.pty.resize(cols, rows);
   }
 });
 
-ipcMain.on('claude:kill', (event, id) => {
-  const session = claudeSessions.get(id);
+ipcMain.on('session:kill', (event, id) => {
+  const session = sessions.get(id);
   if (session) {
     session.pty.kill();
-    claudeSessions.delete(id);
+    sessions.delete(id);
   }
 });
 
 // Send interrupt (Ctrl+C)
-ipcMain.on('claude:interrupt', (event, id) => {
-  const session = claudeSessions.get(id);
+ipcMain.on('session:interrupt', (event, id) => {
+  const session = sessions.get(id);
   if (session) {
     session.pty.write('\x03');
   }
@@ -240,10 +196,10 @@ ipcMain.handle('sessions:load', async () => {
   return [];
 });
 
-ipcMain.handle('sessions:save', async (event, sessions) => {
+ipcMain.handle('sessions:save', async (event, sessionsData) => {
   try {
     const sessionsPath = getSessionsPath();
-    fs.writeFileSync(sessionsPath, JSON.stringify(sessions, null, 2));
+    fs.writeFileSync(sessionsPath, JSON.stringify(sessionsData, null, 2));
     return true;
   } catch (error) {
     console.error('Failed to save sessions:', error);
@@ -478,23 +434,27 @@ ipcMain.handle('process:kill', async (event, pid) => {
 
 // Get running Claude sessions info
 ipcMain.handle('process:get-claude-sessions', () => {
-  const sessions = [];
-  for (const [id, session] of claudeSessions.entries()) {
-    sessions.push({
-      id,
-      pid: session.pty.pid,
-      cwd: session.cwd,
-      createdAt: session.createdAt,
-    });
+  const claudeSessions = [];
+  for (const [id, session] of sessions.entries()) {
+    if (session.type === 'claude') {
+      claudeSessions.push({
+        id,
+        pid: session.pty.pid,
+        cwd: session.cwd,
+        createdAt: session.createdAt,
+      });
+    }
   }
-  return sessions;
+  return claudeSessions;
 });
 
 // Get child processes (sub-agents) of Claude sessions
 ipcMain.handle('process:get-subagents', async () => {
   return new Promise((resolve) => {
     // Get all PIDs of active Claude sessions
-    const claudePids = Array.from(claudeSessions.values()).map(s => s.pty.pid);
+    const claudePids = Array.from(sessions.values())
+      .filter(s => s.type === 'claude')
+      .map(s => s.pty.pid);
 
     if (claudePids.length === 0) {
       resolve([]);
