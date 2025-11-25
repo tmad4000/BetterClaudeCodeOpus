@@ -29,6 +29,7 @@ export function ClaudeSessionProvider({ children }) {
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [currentCwd, setCurrentCwd] = useState(null);
   const [permissionMode, setPermissionMode] = useState('default');
+  const [showCwdWarning, setShowCwdWarning] = useState(false);
   const terminalRefs = useRef(new Map());
 
   // Load app info on mount
@@ -36,7 +37,10 @@ export function ClaudeSessionProvider({ children }) {
     const init = async () => {
       if (window.electronAPI) {
         const info = await window.electronAPI.getAppInfo();
-        setCurrentCwd(info.homePath);
+        setCurrentCwd(info.defaultCwd);
+        if (info.isDefaultCwdFallback) {
+          setShowCwdWarning(true);
+        }
       }
     };
     init();
@@ -148,9 +152,11 @@ export function ClaudeSessionProvider({ children }) {
     activeSessionId,
     currentCwd,
     permissionMode,
+    showCwdWarning,
     setActiveSessionId,
     setCurrentCwd,
     setPermissionMode,
+    setShowCwdWarning,
     cyclePermissionMode,
     createSession,
     closeSession,

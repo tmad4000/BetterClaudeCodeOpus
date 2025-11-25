@@ -19,12 +19,12 @@ const getSessionsPath = () => {
 };
 
 // Get default working directory (~/code if exists, otherwise ~)
-const getDefaultCwd = () => {
+const determineDefaultCwd = () => {
   const codeDir = path.join(process.env.HOME, 'code');
   if (fs.existsSync(codeDir)) {
-    return codeDir;
+    return { path: codeDir, isFallback: false };
   }
-  return process.env.HOME;
+  return { path: process.env.HOME, isFallback: true };
 };
 
 function createWindow() {
@@ -74,11 +74,12 @@ ipcMain.handle('terminal:create', (event, options = {}) => {
   const id = ++terminalIdCounter;
   const shell = process.env.SHELL || '/bin/zsh';
 
+  const defaultCwd = determineDefaultCwd();
   const term = pty.spawn(shell, [], {
     name: 'xterm-256color',
     cols: options.cols || 80,
     rows: options.rows || 24,
-    cwd: options.cwd || getDefaultCwd(),
+    cwd: options.cwd || defaultCwd.path,
     env: { ...process.env, TERM: 'xterm-256color' }
   });
 
@@ -126,7 +127,8 @@ ipcMain.on('terminal:kill', (event, id) => {
 
 ipcMain.handle('claude:create-session', (event, options = {}) => {
   const id = ++claudeSessionIdCounter;
-  const cwd = options.cwd || getDefaultCwd();
+  const defaultCwd = determineDefaultCwd();
+  const cwd = options.cwd || defaultCwd.path;
   const permissionMode = options.permissionMode || 'default';
 
   // Build args based on permission mode
@@ -251,8 +253,11 @@ ipcMain.handle('sessions:save', async (event, sessions) => {
 
 // Get app info
 ipcMain.handle('app:get-info', () => {
+  const defaultCwd = determineDefaultCwd();
   return {
     homePath: process.env.HOME,
+    defaultCwd: defaultCwd.path,
+    isDefaultCwdFallback: defaultCwd.isFallback,
     platform: process.platform,
     version: app.getVersion()
   };

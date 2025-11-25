@@ -9,7 +9,7 @@ import PrettyView from './components/PrettyView';
 import PromptHistory from './components/PromptHistory';
 import {
   Plus, X, Terminal, Sparkles, Folder,
-  Shield, ShieldCheck, Zap, Clock, Code
+  Shield, ShieldCheck, Zap, Clock, Code, AlertCircle
 } from './components/Icons';
 
 function formatRelativeTime(timestamp) {
@@ -490,7 +490,7 @@ function AppContent() {
   const [viewMode, setViewMode] = useState('terminal'); // 'terminal' or 'pretty'
   const [showHistory, setShowHistory] = useState(false);
 
-  const { createSession, sessions, currentCwd } = useClaudeSession();
+  const { createSession, sessions, currentCwd, showCwdWarning, setShowCwdWarning } = useClaudeSession();
   const { createTerminal, terminals } = useTerminal();
   const [hasInitialized, setHasInitialized] = useState(false);
 
@@ -528,11 +528,43 @@ function AppContent() {
         activeTab={activeTab}
         onTabSelect={setActiveTab}
       />
-      <MainArea
-        activeTab={activeTab}
-        viewMode={viewMode}
-        setViewMode={setViewMode}
-      />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {showCwdWarning && (
+            <div style={{
+                background: 'rgba(210, 153, 34, 0.2)',
+                color: 'var(--accent-orange)',
+                padding: '8px 16px',
+                fontSize: 13,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                borderBottom: '1px solid rgba(210, 153, 34, 0.3)',
+            }}>
+                <AlertCircle style={{ width: 16, height: 16 }} />
+                <span>
+                    <strong>Note:</strong> "~/code" directory not found. Defaulting to home directory ({currentCwd}).
+                </span>
+                <button
+                    onClick={() => setShowCwdWarning(false)}
+                    style={{
+                        marginLeft: 'auto',
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'inherit',
+                        cursor: 'pointer',
+                        display: 'flex',
+                    }}
+                >
+                    <X style={{ width: 14, height: 14 }} />
+                </button>
+            </div>
+        )}
+        <MainArea
+            activeTab={activeTab}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+        />
+      </div>
       <PromptHistory
         isOpen={showHistory}
         onClose={() => setShowHistory(false)}
