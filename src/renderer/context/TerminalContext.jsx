@@ -1,11 +1,54 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 
 const TerminalContext = createContext(null);
+
+// Permission modes for Claude sessions
+export const PERMISSION_MODES = {
+  default: {
+    name: 'Default',
+    description: 'Normal permissions with confirmations',
+    color: 'var(--text-secondary)',
+  },
+  yolo: {
+    name: 'YOLO',
+    description: 'Skip all permission prompts',
+    color: 'var(--accent-orange)',
+  },
+  plan: {
+    name: 'Plan',
+    description: 'Plan mode for careful execution',
+    color: 'var(--accent-cyan)',
+  },
+};
 
 export function TerminalProvider({ children }) {
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
+  const [currentCwd, setCurrentCwd] = useState(null);
+  const [permissionMode, setPermissionMode] = useState('default');
+  const [showCwdWarning, setShowCwdWarning] = useState(false);
   const terminalRefs = useRef(new Map());
+
+  // Initialize CWD from app info
+  useEffect(() => {
+    if (window.electronAPI) {
+      window.electronAPI.getAppInfo().then((info) => {
+        setCurrentCwd(info.defaultCwd);
+        if (info.isDefaultCwdFallback) {
+          setShowCwdWarning(true);
+        }
+      });
+    }
+  }, []);
+
+  const selectDirectory = useCallback(async () => {
+    if (!window.electronAPI) return;
+    const dir = await window.electronAPI.selectDirectory();
+    if (dir) {
+      setCurrentCwd(dir);
+      setShowCwdWarning(false);
+    }
+  }, []);
 
   const createTerminal = useCallback(async (options = {}) => {
     if (!window.electronAPI) {
@@ -15,20 +58,22 @@ export function TerminalProvider({ children }) {
 
     try {
       const type = options.type || 'shell';
-      const { id, pid, cwd } = await window.electronAPI.createSession({
+      const cwd = options.cwd || currentCwd;
+      const { id, pid, cwd: actualCwd } = await window.electronAPI.createSession({
         ...options,
         type,
+        cwd,
+        permissionMode: type === 'claude' ? permissionMode : undefined,
       });
 
       const newSession = {
         id,
         pid,
         title: options.title || (type === 'claude' ? 'Claude Code' : `Terminal ${sessions.length + 1}`),
-        cwd: cwd || options.cwd || process.env.HOME,
+        cwd: actualCwd || cwd || process.env.HOME,
         type,
         createdAt: Date.now(),
-        // Default permission mode for Claude sessions
-        permissionMode: options.permissionMode || 'default', 
+        permissionMode: type === 'claude' ? permissionMode : undefined,
       };
 
       setSessions((prev) => [...prev, newSession]);
@@ -38,7 +83,7 @@ export function TerminalProvider({ children }) {
       console.error('Failed to create session:', error);
       return null;
     }
-  }, [sessions.length]);
+  }, [sessions.length, currentCwd, permissionMode]);
 
   const closeTerminal = useCallback((id) => {
     if (window.electronAPI) {
@@ -92,6 +137,12 @@ export function TerminalProvider({ children }) {
     updateSession,
     setTerminalRef,
     getTerminalRef,
+    currentCwd,
+    permissionMode,
+    setPermissionMode,
+    selectDirectory,
+    showCwdWarning,
+    setShowCwdWarning,
   };
 
   return (
