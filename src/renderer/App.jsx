@@ -342,6 +342,19 @@ function Sidebar({ onShowHistory, onShowHelp, isCollapsed, onToggle }) {
             </div>
           )}
         </div>
+
+        {/* Session History - prominent at top */}
+        <div
+          className="sidebar-item"
+          onClick={onShowHistory}
+          style={{ margin: '0 8px 0 8px' }}
+        >
+          <Clock className="sidebar-item-icon" />
+          <div className="sidebar-item-content">
+            <div className="sidebar-item-title">Session History</div>
+            <div className="sidebar-item-meta">Browse past sessions</div>
+          </div>
+        </div>
       </div>
 
       <div style={{ padding: 16, borderTop: '1px solid var(--border-primary)', marginTop: 'auto' }}>
@@ -364,18 +377,6 @@ function Sidebar({ onShowHistory, onShowHelp, isCollapsed, onToggle }) {
               {currentCwd ? currentCwd.split('/').slice(-2).join('/') : 'Select directory'}
             </div>
             <div className="sidebar-item-meta">Working directory</div>
-          </div>
-        </div>
-
-        <div
-          className="sidebar-item"
-          onClick={onShowHistory}
-          style={{ marginBottom: 8 }}
-        >
-          <Clock className="sidebar-item-icon" />
-          <div className="sidebar-item-content">
-            <div className="sidebar-item-title">Prompt History</div>
-            <div className="sidebar-item-meta">Browse past prompts</div>
           </div>
         </div>
 

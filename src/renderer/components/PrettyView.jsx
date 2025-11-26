@@ -1,49 +1,69 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Copy, CheckCircle } from './Icons';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useTerminal } from '../context/TerminalContext';
+import { Copy, CheckCircle, RefreshCw } from './Icons';
 
-// Parse ANSI escape codes and convert to styled spans
-function parseAnsi(text) {
-  // Simple ANSI parser - strips codes for clean text view
-  return text.replace(/\x1b\[[0-9;]*[mGKHJ]/g, '');
-}
+// Extract text from xterm buffer - this gives us the "rendered" view
+function getBufferText(term) {
+  if (!term || !term.buffer) return '';
 
-// Simple text cleaning - removes control characters but preserves newlines
-function cleanText(text) {
-  return parseAnsi(text)
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    // Remove cursor movement sequences
-    .replace(/\x1b\[\d*[ABCD]/g, '')
-    // Remove other escape sequences
-    .replace(/\x1b\][^\x07]*\x07/g, '')
-    .replace(/\x1b[()][AB012]/g, '')
-    .replace(/\x1b\[[\d;]*[a-zA-Z]/g, '');
+  const buffer = term.buffer.active;
+  const lines = [];
+
+  // Get all lines from the buffer
+  for (let i = 0; i < buffer.length; i++) {
+    const line = buffer.getLine(i);
+    if (line) {
+      lines.push(line.translateToString(true)); // true = trim trailing whitespace
+    }
+  }
+
+  // Join and clean up excessive blank lines
+  let text = lines.join('\n');
+
+  // Remove excessive consecutive newlines (more than 2)
+  text = text.replace(/\n{3,}/g, '\n\n');
+
+  // Trim leading/trailing whitespace
+  text = text.trim();
+
+  return text;
 }
 
 export default function PrettyView({ sessionId, isActive }) {
-  const [rawBuffer, setRawBuffer] = useState('');
+  const { getTerminalRef } = useTerminal();
+  const [bufferText, setBufferText] = useState('');
   const containerRef = useRef(null);
   const inputRef = useRef(null);
   const [inputValue, setInputValue] = useState('');
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    if (!window.electronAPI || !sessionId) return;
-
-    // Listen to raw output
-    const unsubscribe = window.electronAPI.onClaudeOutput(sessionId, (data) => {
-      setRawBuffer(prev => prev + data);
-    });
-
-    return () => unsubscribe();
-  }, [sessionId]);
+  // Update buffer text periodically when active
+  const updateBufferText = useCallback(() => {
+    const termRef = getTerminalRef(sessionId);
+    if (termRef?.term) {
+      const text = getBufferText(termRef.term);
+      setBufferText(text);
+    }
+  }, [sessionId, getTerminalRef]);
 
   useEffect(() => {
-    // Auto-scroll to bottom
-    if (containerRef.current) {
+    if (!isActive) return;
+
+    // Update immediately when becoming active
+    updateBufferText();
+
+    // Poll for updates while active
+    const interval = setInterval(updateBufferText, 500);
+
+    return () => clearInterval(interval);
+  }, [isActive, updateBufferText]);
+
+  useEffect(() => {
+    // Auto-scroll to bottom when content changes
+    if (containerRef.current && isActive) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [rawBuffer]);
+  }, [bufferText, isActive]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -51,16 +71,24 @@ export default function PrettyView({ sessionId, isActive }) {
 
     window.electronAPI.sendClaudeMessage(sessionId, inputValue + '\r');
     setInputValue('');
+
+    // Update view after sending
+    setTimeout(updateBufferText, 100);
+  };
+
+  const handleKeyDown = (e) => {
+    // Enter sends, Shift+Enter or Option+Enter for newline
+    if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
   };
 
   const handleCopy = () => {
-    const cleanedText = cleanText(rawBuffer);
-    navigator.clipboard.writeText(cleanedText);
+    navigator.clipboard.writeText(bufferText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
-  const cleanedOutput = cleanText(rawBuffer);
 
   return (
     <div
@@ -82,9 +110,29 @@ export default function PrettyView({ sessionId, isActive }) {
           borderBottom: '1px solid var(--border-primary)',
         }}
       >
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          Clean text view (ANSI codes stripped)
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            Clean text view (from terminal buffer)
+          </span>
+          <button
+            onClick={updateBufferText}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '2px 6px',
+              background: 'transparent',
+              border: '1px solid var(--border-primary)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--text-muted)',
+              fontSize: 11,
+              cursor: 'pointer',
+            }}
+            title="Refresh view"
+          >
+            <RefreshCw style={{ width: 12, height: 12 }} />
+          </button>
+        </div>
         <button
           onClick={handleCopy}
           style={{
@@ -133,7 +181,7 @@ export default function PrettyView({ sessionId, isActive }) {
             color: 'var(--text-primary)',
           }}
         >
-          {cleanedOutput || 'Waiting for Claude output...'}
+          {bufferText || 'Waiting for Claude output...'}
         </div>
       </div>
 
@@ -158,7 +206,8 @@ export default function PrettyView({ sessionId, isActive }) {
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Type a message..."
+            onKeyDown={handleKeyDown}
+            placeholder="Type a message... (Enter to send)"
             style={{
               flex: 1,
               padding: '10px 14px',
@@ -186,6 +235,9 @@ export default function PrettyView({ sessionId, isActive }) {
           >
             Send
           </button>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+          Press Enter to send
         </div>
       </form>
     </div>
