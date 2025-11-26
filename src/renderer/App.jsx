@@ -5,10 +5,11 @@ import ProcessTracker from './components/ProcessTracker';
 import PrettyView from './components/PrettyView';
 import PromptHistory from './components/PromptHistory';
 import ClaudeTerminal from './components/ClaudeTerminal';
+import HelpDialog from './components/HelpDialog';
 import {
   Plus, X, Terminal, Sparkles, Folder,
   Shield, ShieldCheck, Zap, Clock, Code, AlertCircle,
-  PanelLeftClose, PanelLeftOpen
+  PanelLeftClose, PanelLeftOpen, HelpCircle
 } from './components/Icons';
 
 function formatRelativeTime(timestamp) {
@@ -93,7 +94,7 @@ function PermissionModeSelector({ currentMode, onSelect, onClose }) {
   );
 }
 
-function Sidebar({ onShowHistory, isCollapsed, onToggle }) {
+function Sidebar({ onShowHistory, onShowHelp, isCollapsed, onToggle }) {
   const {
     sessions,
     activeSessionId,
@@ -412,12 +413,24 @@ function Sidebar({ onShowHistory, isCollapsed, onToggle }) {
         <div
           className="sidebar-item"
           onClick={onShowHistory}
-          style={{ marginBottom: 0 }}
+          style={{ marginBottom: 8 }}
         >
           <Clock className="sidebar-item-icon" />
           <div className="sidebar-item-content">
             <div className="sidebar-item-title">Prompt History</div>
             <div className="sidebar-item-meta">Browse past prompts</div>
+          </div>
+        </div>
+
+        <div
+          className="sidebar-item"
+          onClick={onShowHelp}
+          style={{ marginBottom: 0 }}
+        >
+          <HelpCircle className="sidebar-item-icon" />
+          <div className="sidebar-item-content">
+            <div className="sidebar-item-title">Help</div>
+            <div className="sidebar-item-meta">Shortcuts & usage (Cmd+?)</div>
           </div>
         </div>
       </div>
@@ -603,6 +616,7 @@ function MainArea({ viewMode, setViewMode }) {
 function AppContent() {
   const [viewMode, setViewMode] = useState('terminal'); // 'terminal' or 'pretty'
   const [showHistory, setShowHistory] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const { createTerminal, sessions, currentCwd, showCwdWarning, setShowCwdWarning, launchOptions, permissionMode } = useTerminal();
@@ -655,17 +669,27 @@ function AppContent() {
         e.preventDefault();
         setSidebarCollapsed(prev => !prev);
       }
+      // Command/Control + ? (or /) for help
+      if ((e.metaKey || e.ctrlKey) && (e.key === '?' || e.key === '/')) {
+        e.preventDefault();
+        setShowHelp(prev => !prev);
+      }
+      // Escape to close help
+      if (e.key === 'Escape' && showHelp) {
+        setShowHelp(false);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [createTerminal, currentCwd]);
+  }, [createTerminal, currentCwd, showHelp]);
 
   return (
     <div className="app">
       <div className="titlebar-drag-region" />
       <Sidebar
         onShowHistory={() => setShowHistory(true)}
+        onShowHelp={() => setShowHelp(true)}
         isCollapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
@@ -711,6 +735,10 @@ function AppContent() {
         onSelectPrompt={(prompt) => {
           console.log('Selected prompt:', prompt);
         }}
+      />
+      <HelpDialog
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
       />
     </div>
   );

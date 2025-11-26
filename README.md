@@ -1,36 +1,8 @@
-# Better Claude Code
+# Better Terminal
 
-A modern, feature-rich desktop interface for Claude Code that improves on the terminal experience.
+A modern terminal app optimized for Claude Code. Launch Claude sessions from anywhere with proper Ctrl+C support, multiple tabs, and convenient keyboard shortcuts.
 
-## Features
-
-### Conversation View
-- **Collapsible Blocks**: Expand/collapse code blocks, analysis sections, and diffs to manage visual clutter
-- **Tool Call Visualization**: See tool calls with their inputs/outputs in a clean, expandable format
-- **Message Threading**: Clear visual distinction between user and assistant messages
-
-### Right Panel - Open Threads
-- **Unresolved Questions**: Track questions Claude has asked that you haven't addressed
-- **Pending Items**: See tasks that are waiting on external actions
-- **Errors**: Quick access to any errors that occurred
-- **Mark as Resolved**: Dismiss items once handled
-
-### Integrated Terminal
-- **Multiple Tabs**: Create multiple terminal sessions
-- **Claude Sessions**: Start dedicated Claude Code sessions with one click
-- **Full Terminal Mode**: Switch to full-screen terminal when you need it
-
-### View Modes
-- **Chat**: Full conversation view
-- **Split**: Conversation + terminal panel below
-- **Terminal**: Full terminal mode (revert to classic experience)
-
-### Session Management
-- Switch between different coding sessions
-- View message counts and timestamps
-- Start new sessions with one click
-
-## Installation
+## Quick Start
 
 ```bash
 # Install dependencies
@@ -39,47 +11,154 @@ npm install
 # Rebuild native modules for Electron
 npm run rebuild
 
-# Start the app in development mode
+# Start the app
 npm start
 ```
+
+## Command Line Usage
+
+Launch the app from any terminal with your current session:
+
+```bash
+# Open in current directory (default: starts Claude)
+better-terminal .
+
+# Open in specific directory
+better-terminal /path/to/project
+
+# Open with YOLO mode (skips permission prompts)
+better-terminal . --yolo
+better-terminal . -y
+
+# Explicitly start Claude (default behavior)
+better-terminal --claude
+better-terminal -c
+```
+
+### Development Mode
+
+Before the app is packaged/installed, you can launch from the project directory:
+
+```bash
+# From the BetterClaudeCodeOpus directory:
+npm start -- .                          # Open in current directory
+npm start -- /path/to/project           # Open in specific directory
+npm start -- . --yolo                   # YOLO mode
+npm start -- /path/to/project -y        # Combine options
+```
+
+### Shell Aliases (Recommended)
+
+Add to your `~/.zshrc` or `~/.bashrc`:
+
+```bash
+# Quick launch in current directory
+alias bt='open -a "Better Claude Code" --args "$(pwd)"'
+
+# YOLO mode (skips all permission prompts)
+alias bty='open -a "Better Claude Code" --args "$(pwd)" --yolo'
+```
+
+Then just type `bt` or `bty` from any directory!
+
+## Features
+
+### Terminal
+- **Real Terminal**: Full xterm.js terminal with proper Ctrl+C, colors, and shell integration
+- **Login Shell**: Inherits your PATH, aliases, and shell configuration
+- **Multiple Tabs**: Create as many terminal sessions as you need
+- **Tab Persistence**: Each tab maintains its own session state
+
+### Claude Integration
+- **Auto-Start Claude**: Opens Claude Code automatically when you launch
+- **Permission Modes**:
+  - **Default**: Normal mode with permission confirmations
+  - **YOLO**: Skip all permission prompts (`--dangerously-skip-permissions`)
+  - **Plan**: (Coming soon) Plan mode for careful execution
+- **Mode Indicator**: See the current mode in the top bar
+
+### Interface
+- **Collapsible Sidebar**: Toggle with `Cmd+B` for more terminal space
+- **Working Directory**: Click to change the working directory
+- **Pretty View**: Toggle between terminal and clean text view (strips ANSI codes)
+- **Process Tracker**: See running processes and ports
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Cmd+T` | New terminal tab |
+| `Cmd+N` | New window |
+| `Cmd+B` | Toggle sidebar |
+| `Cmd+W` | Close tab/window |
 
 ## Development
 
 ```bash
-# Run in development mode with hot reload
-npm run dev
+# Run in development mode (hot reload)
+npm start
 
 # Build for production
 npm run build
+
+# Package the app
+npm run package
 ```
 
-## Architecture
-
-- **Electron** - Desktop application framework
-- **React** - UI framework
-- **xterm.js** - Terminal emulator
-- **node-pty** - Native terminal backend
-- **Vite** - Build tooling
-
-## Project Structure
+### Project Structure
 
 ```
 src/
 ├── main/
-│   ├── main.js      # Electron main process
-│   └── preload.js   # Preload script for IPC
+│   ├── main.js      # Electron main process, PTY spawning, IPC
+│   └── preload.js   # Secure bridge between main and renderer
 └── renderer/
-    ├── components/  # React components
-    ├── context/     # React context providers
+    ├── components/  # React components (TerminalInstance, PrettyView, etc.)
+    ├── context/     # React context (TerminalContext for state management)
     ├── styles/      # CSS styles
     ├── App.jsx      # Main app component
     └── main.jsx     # Entry point
 ```
 
-## Design Decisions
+### Architecture
 
-1. **Collapsible Everything**: Long outputs, code blocks, and tool results can all be collapsed to reduce noise
-2. **Persistent Threads Panel**: Never lose track of questions or pending items
-3. **Native Terminal**: Real terminal emulation, not just styled output
-4. **Multiple Sessions**: Keep context separated between different coding tasks
-5. **Quick Mode Switching**: Easily switch between rich UI and pure terminal mode
+- **Electron** - Desktop application framework
+- **React** - UI framework
+- **xterm.js** - Terminal emulator
+- **node-pty** - Native terminal backend (spawns real shells)
+- **Vite** - Build tooling
+
+### Why a Terminal Wrapper?
+
+Instead of trying to parse and render Claude's output (which uses complex ANSI formatting), this app:
+
+1. Spawns a real login shell (`zsh --login`)
+2. Auto-types the `claude` command
+3. Lets xterm.js handle all the terminal rendering
+
+This means:
+- Full compatibility with Claude Code's terminal UI
+- Proper Ctrl+C handling
+- All your shell configuration works
+- No parsing bugs or missing features
+
+## Tips
+
+### For Voice/Dictation Users
+The terminal has been optimized for dictation workflows - click anywhere on the terminal to focus it.
+
+### Permission Modes
+- Start with **Default** mode until you're comfortable
+- Use **YOLO** mode for trusted projects where you want faster iteration
+- The mode is shown in the top bar so you always know what mode you're in
+
+### Multiple Projects
+Open different windows for different projects - each window tracks its own working directory and permission settings.
+
+## Contributing
+
+PRs welcome! This is an open-source project to make Claude Code more accessible.
+
+## License
+
+MIT
