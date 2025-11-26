@@ -27,15 +27,24 @@ export function TerminalProvider({ children }) {
   const [currentCwd, setCurrentCwd] = useState(null);
   const [permissionMode, setPermissionMode] = useState('default');
   const [showCwdWarning, setShowCwdWarning] = useState(false);
+  const [launchOptions, setLaunchOptions] = useState(null);
   const terminalRefs = useRef(new Map());
 
-  // Initialize CWD from app info
+  // Initialize CWD and launch options from app info
   useEffect(() => {
     if (window.electronAPI) {
       window.electronAPI.getAppInfo().then((info) => {
         setCurrentCwd(info.defaultCwd);
         if (info.isDefaultCwdFallback) {
           setShowCwdWarning(true);
+        }
+        // Store launch options for initial session creation
+        if (info.launchOptions) {
+          setLaunchOptions(info.launchOptions);
+          // If launched with --yolo, set permission mode
+          if (info.launchOptions.yoloMode) {
+            setPermissionMode('yolo');
+          }
         }
       });
     }
@@ -145,6 +154,7 @@ export function TerminalProvider({ children }) {
     selectDirectory,
     showCwdWarning,
     setShowCwdWarning,
+    launchOptions,
   };
 
   return (

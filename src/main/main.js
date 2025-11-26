@@ -10,6 +10,42 @@ const windows = new Set();
 const sessions = new Map();
 let sessionIdCounter = 0;
 
+// Parse command line arguments
+// Usage: better-terminal [path] [--claude] [--yolo]
+function parseArgs() {
+  const args = process.argv.slice(isDev ? 2 : 1); // Skip electron/app path in dev
+  const options = {
+    cwd: null,
+    autoStartClaude: false,
+    yoloMode: false,
+  };
+
+  for (const arg of args) {
+    if (arg === '--claude' || arg === '-c') {
+      options.autoStartClaude = true;
+    } else if (arg === '--yolo' || arg === '-y') {
+      options.yoloMode = true;
+      options.autoStartClaude = true; // --yolo implies --claude
+    } else if (!arg.startsWith('-') && !arg.startsWith('--')) {
+      // Treat as path - resolve relative paths
+      let resolvedPath = arg;
+      if (arg === '.') {
+        resolvedPath = process.cwd();
+      } else if (!path.isAbsolute(arg)) {
+        resolvedPath = path.resolve(process.cwd(), arg);
+      }
+      // Verify the path exists
+      if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isDirectory()) {
+        options.cwd = resolvedPath;
+      }
+    }
+  }
+
+  return options;
+}
+
+const launchOptions = parseArgs();
+
 // Sessions storage path
 const getSessionsPath = () => {
   const userDataPath = app.getPath('userData');
@@ -310,12 +346,20 @@ ipcMain.handle('sessions:save', async (event, sessionsData) => {
 // Get app info
 ipcMain.handle('app:get-info', () => {
   const defaultCwd = determineDefaultCwd();
+  // If launched with a path argument, use that instead
+  const effectiveCwd = launchOptions.cwd || defaultCwd.path;
   return {
     homePath: process.env.HOME,
-    defaultCwd: defaultCwd.path,
-    isDefaultCwdFallback: defaultCwd.isFallback,
+    defaultCwd: effectiveCwd,
+    isDefaultCwdFallback: !launchOptions.cwd && defaultCwd.isFallback,
     platform: process.platform,
-    version: app.getVersion()
+    version: app.getVersion(),
+    // Launch options
+    launchOptions: {
+      cwd: launchOptions.cwd,
+      autoStartClaude: launchOptions.autoStartClaude,
+      yoloMode: launchOptions.yoloMode,
+    },
   };
 });
 

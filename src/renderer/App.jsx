@@ -605,30 +605,42 @@ function AppContent() {
   const [showHistory, setShowHistory] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const { createTerminal, sessions, currentCwd, showCwdWarning, setShowCwdWarning } = useTerminal();
+  const { createTerminal, sessions, currentCwd, showCwdWarning, setShowCwdWarning, launchOptions, permissionMode } = useTerminal();
   const [hasInitialized, setHasInitialized] = useState(false);
 
   // Initialize: Start a shell terminal, then type `claude` into it
+  // Respects launch options (--claude, --yolo, path argument)
   useEffect(() => {
       if (!hasInitialized && sessions.length === 0 && currentCwd) {
           (async () => {
+              // Determine the mode based on launch options
+              const mode = launchOptions?.yoloMode ? 'yolo' : (permissionMode || 'default');
+              const isClaudeSession = launchOptions?.autoStartClaude !== false; // Default to true
+
+              // Build claude command based on mode
+              let claudeCmd = 'claude';
+              if (mode === 'yolo') {
+                  claudeCmd = 'claude --dangerously-skip-permissions';
+              }
+
               const session = await createTerminal({
                   type: 'shell',
                   cwd: currentCwd,
-                  title: 'Claude',
-                  claudeMode: 'default',
-                  isClaudeSession: true,
+                  title: isClaudeSession ? `Claude ${mode === 'yolo' ? '(YOLO)' : ''}`.trim() : 'Terminal',
+                  claudeMode: isClaudeSession ? mode : undefined,
+                  isClaudeSession,
               });
-              if (session && window.electronAPI) {
+
+              if (session && window.electronAPI && isClaudeSession) {
                   // Wait for shell to initialize, then type claude command
                   setTimeout(() => {
-                      window.electronAPI.sendSessionInput(session.id, 'claude\n');
+                      window.electronAPI.sendSessionInput(session.id, claudeCmd + '\n');
                   }, 500);
               }
           })();
           setHasInitialized(true);
       }
-  }, [hasInitialized, sessions.length, createTerminal, currentCwd]);
+  }, [hasInitialized, sessions.length, createTerminal, currentCwd, launchOptions, permissionMode]);
 
   // Handle global shortcuts
   useEffect(() => {
