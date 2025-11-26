@@ -126,10 +126,13 @@ export default function TerminalInstance({ terminal, isActive }) {
 
   useEffect(() => {
     if (isActive && fitAddonRef.current && xtermRef.current) {
-      requestAnimationFrame(() => {
+      // Use setTimeout to ensure DOM has updated after display change
+      setTimeout(() => {
         fitAddonRef.current?.fit();
+        // Refresh the terminal to redraw content after being hidden
+        xtermRef.current?.refresh(0, xtermRef.current.rows - 1);
         xtermRef.current?.focus();
-      });
+      }, 0);
     }
   }, [isActive]);
 
@@ -150,10 +153,13 @@ export default function TerminalInstance({ terminal, isActive }) {
       style={{
         width: '100%',
         height: '100%',
-        display: isActive ? 'block' : 'none',
         padding: '8px',
         boxSizing: 'border-box',
-        position: 'relative'
+        position: isActive ? 'relative' : 'absolute',
+        visibility: isActive ? 'visible' : 'hidden',
+        top: 0,
+        left: 0,
+        zIndex: isActive ? 1 : 0,
       }}
     >
         {isExited && terminal.type === 'claude' && (

@@ -412,21 +412,21 @@ function MainArea({ viewMode, setViewMode }) {
               </div>
         ) : (
             <>
-            {/* Render ALL sessions/terminals but hide inactive ones to preserve state */}
+            {/* Render ALL sessions/terminals - visibility handled inside each component */}
             {sessions.map(session => (
-                <div key={session.id} style={{ display: activeSessionId === session.id ? 'block' : 'none', height: '100%' }}>
-                     {session.type === 'claude' && viewMode === 'pretty' ? (
-                        <PrettyView
-                          sessionId={session.id}
-                          isActive={activeSessionId === session.id}
-                        />
-                      ) : (
-                        <TerminalInstance
-                          terminal={session}
-                          isActive={activeSessionId === session.id}
-                        />
-                      )}
-                </div>
+                session.type === 'claude' && viewMode === 'pretty' ? (
+                  <PrettyView
+                    key={session.id}
+                    sessionId={session.id}
+                    isActive={activeSessionId === session.id}
+                  />
+                ) : (
+                  <TerminalInstance
+                    key={session.id}
+                    terminal={session}
+                    isActive={activeSessionId === session.id}
+                  />
+                )
             ))}
             </>
         )}
