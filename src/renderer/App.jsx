@@ -462,10 +462,22 @@ function AppContent() {
   const { createTerminal, sessions, currentCwd, showCwdWarning, setShowCwdWarning } = useTerminal();
   const [hasInitialized, setHasInitialized] = useState(false);
 
-  // Initialize: Start a Claude session if none exist
+  // Initialize: Start a shell terminal, then type `claude` into it
   useEffect(() => {
       if (!hasInitialized && sessions.length === 0 && currentCwd) {
-          createTerminal({ type: 'claude', cwd: currentCwd });
+          (async () => {
+              const session = await createTerminal({
+                  type: 'shell',
+                  cwd: currentCwd,
+                  title: 'Claude'
+              });
+              if (session && window.electronAPI) {
+                  // Wait for shell to initialize, then type claude command
+                  setTimeout(() => {
+                      window.electronAPI.sendSessionInput(session.id, 'claude\n');
+                  }, 500);
+              }
+          })();
           setHasInitialized(true);
       }
   }, [hasInitialized, sessions.length, createTerminal, currentCwd]);
