@@ -69,10 +69,10 @@ export default function ClaudeTerminal({ sessionId, isActive, onReady }) {
 
         term.open(containerRef.current);
 
-        // Small delay to ensure container is properly sized
-        setTimeout(() => {
+        // Ensure container is properly sized
+        requestAnimationFrame(() => {
           fitAddon.fit();
-        }, 50);
+        });
 
         xtermRef.current = term;
         fitAddonRef.current = fitAddon;
@@ -128,10 +128,10 @@ export default function ClaudeTerminal({ sessionId, isActive, onReady }) {
 
   useEffect(() => {
     if (isActive && fitAddonRef.current && xtermRef.current) {
-      setTimeout(() => {
+      requestAnimationFrame(() => {
         fitAddonRef.current?.fit();
         xtermRef.current?.focus();
-      }, 50);
+      });
     }
   }, [isActive]);
 

@@ -41,7 +41,7 @@ function createWindow() {
   });
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.loadURL('http://localhost:31337');
     // Don't auto-open DevTools - use Cmd+Option+I to open manually
   } else {
     mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));

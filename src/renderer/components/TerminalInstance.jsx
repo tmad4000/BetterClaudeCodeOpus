@@ -125,11 +125,11 @@ export default function TerminalInstance({ terminal, isActive }) {
   }, [terminal.id, setTerminalRef, terminal.type]);
 
   useEffect(() => {
-    if (isActive && fitAddonRef.current) {
-      setTimeout(() => {
+    if (isActive && fitAddonRef.current && xtermRef.current) {
+      requestAnimationFrame(() => {
         fitAddonRef.current?.fit();
         xtermRef.current?.focus();
-      }, 0);
+      });
     }
   }, [isActive]);
 
