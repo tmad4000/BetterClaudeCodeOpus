@@ -107,15 +107,6 @@ body {
   gap: 8px;
 }
 
-.sidebar-header h1::before {
-  content: '';
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  background: var(--accent-green);
-  border-radius: 50%;
-  box-shadow: 0 0 8px var(--accent-green);
-}
 
 .sidebar-section {
   padding: 12px;

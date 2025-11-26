@@ -655,6 +655,22 @@ function AppContent() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [createTerminal, currentCwd, showHelp]);
 
+  // Handle Cmd+W from menu to close current tab
+  const { closeTerminal } = useTerminal();
+  useEffect(() => {
+    if (!window.electronAPI?.onCloseCurrentTab) return;
+    const unsubscribe = window.electronAPI.onCloseCurrentTab(() => {
+      // If only one tab, close the window instead
+      if (sessions.length <= 1) {
+        window.close();
+      } else {
+        // Close the active tab
+        closeTerminal(activeSessionId);
+      }
+    });
+    return unsubscribe;
+  }, [sessions.length, activeSessionId, closeTerminal]);
+
   return (
     <div className="app">
       <div className="titlebar-drag-region" />

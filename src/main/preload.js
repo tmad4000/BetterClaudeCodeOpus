@@ -61,4 +61,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('process:updated', subscription);
     return () => ipcRenderer.removeListener('process:updated', subscription);
   },
+
+  // Tab management
+  onCloseCurrentTab: (callback) => {
+    const subscription = () => callback();
+    ipcRenderer.on('close-current-tab', subscription);
+    return () => ipcRenderer.removeListener('close-current-tab', subscription);
+  },
 });

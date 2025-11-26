@@ -121,7 +121,17 @@ function setupMenu() {
           click: () => createWindow()
         },
         { type: 'separator' },
-        isMac ? { role: 'close' } : { role: 'quit' }
+        {
+          label: 'Close Tab',
+          accelerator: 'CmdOrCtrl+W',
+          click: (menuItem, browserWindow) => {
+            if (browserWindow) {
+              browserWindow.webContents.send('close-current-tab');
+            }
+          }
+        },
+        { type: 'separator' },
+        isMac ? { role: 'close', accelerator: 'CmdOrCtrl+Shift+W' } : { role: 'quit' }
       ]
     },
     // Edit menu

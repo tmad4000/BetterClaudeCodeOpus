@@ -4,8 +4,9 @@ import { X, Terminal, Sparkles, Zap, Keyboard, Folder, ExternalLink } from './Ic
 const shortcuts = [
   { keys: 'Cmd+T', action: 'New terminal tab' },
   { keys: 'Cmd+N', action: 'New window' },
+  { keys: 'Cmd+W', action: 'Close current tab' },
+  { keys: 'Cmd+Shift+W', action: 'Close window' },
   { keys: 'Cmd+B', action: 'Toggle sidebar' },
-  { keys: 'Cmd+W', action: 'Close tab/window' },
   { keys: 'Cmd+?', action: 'Show this help' },
   { keys: 'Ctrl+C', action: 'Interrupt (in terminal)' },
 ];
@@ -134,59 +135,33 @@ export default function HelpDialog({ isOpen, onClose }) {
             </div>
           </section>
 
-          {/* Permission Modes */}
+          {/* Permission Modes - compact */}
           <section style={{ marginBottom: 24 }}>
             <h3 style={{
               fontSize: 13,
               fontWeight: 600,
               color: 'var(--text-primary)',
-              marginBottom: 12,
+              marginBottom: 8,
               display: 'flex',
               alignItems: 'center',
               gap: 8,
             }}>
-              <Sparkles style={{ width: 16, height: 16, color: 'var(--accent-primary)' }} />
+              <Sparkles style={{ width: 14, height: 14, color: 'var(--accent-primary)' }} />
               Permission Modes
             </h3>
             <div style={{
               background: 'var(--bg-secondary)',
               borderRadius: 'var(--radius-md)',
               border: '1px solid var(--border-primary)',
-              padding: 14,
+              padding: '8px 12px',
+              fontSize: 12,
             }}>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', marginBottom: 4 }}>
-                  Default
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  Normal mode with permission confirmations for file writes, commands, etc.
-                </div>
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <div style={{
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: 'var(--accent-orange)',
-                  marginBottom: 4,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}>
-                  <Zap style={{ width: 14, height: 14 }} />
-                  YOLO
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  Skip all permission prompts. Use for trusted projects when you want faster iteration.
-                  Runs with <code style={{ background: 'var(--bg-tertiary)', padding: '2px 4px', borderRadius: 2 }}>--dangerously-skip-permissions</code>
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--accent-cyan)', marginBottom: 4 }}>
-                  Plan
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  (Coming soon) Plan mode for careful execution with review steps.
-                </div>
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                <span><strong>Default</strong> – confirmations on</span>
+                <span style={{ color: 'var(--accent-orange)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                  <Zap style={{ width: 11, height: 11 }} /><strong>YOLO</strong> – skip prompts
+                </span>
+                <span style={{ color: 'var(--text-muted)' }}><strong>Plan</strong> – coming soon</span>
               </div>
             </div>
           </section>
