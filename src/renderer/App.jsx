@@ -551,7 +551,7 @@ function AppContent() {
   const [viewMode, setViewMode] = useState('terminal'); // 'terminal' or 'pretty'
   const [showHistory, setShowHistory] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   const { createTerminal, sessions, currentCwd, showCwdWarning, setShowCwdWarning, launchOptions, permissionMode, activeSessionId } = useTerminal();
   const [hasInitialized, setHasInitialized] = useState(false);
