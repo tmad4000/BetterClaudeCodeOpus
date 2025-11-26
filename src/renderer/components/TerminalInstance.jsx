@@ -156,7 +156,11 @@ export default function TerminalInstance({ terminal, isActive }) {
   return (
     <div
       ref={containerRef}
-      onClick={() => xtermRef.current?.focus()}
+      onClick={() => {
+        console.log('Terminal container clicked, focusing...', terminal.id);
+        xtermRef.current?.focus();
+      }}
+      tabIndex={0}
       style={{
         width: '100%',
         height: '100%',
@@ -167,6 +171,7 @@ export default function TerminalInstance({ terminal, isActive }) {
         top: 0,
         left: 0,
         zIndex: isActive ? 1 : 0,
+        outline: 'none',
       }}
     >
         {isExited && terminal.type === 'claude' && (

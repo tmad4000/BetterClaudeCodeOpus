@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const pty = require('node-pty');
@@ -6,7 +6,7 @@ const { exec } = require('child_process');
 
 const isDev = process.env.NODE_ENV === 'development';
 
-let mainWindow;
+const windows = new Set();
 const sessions = new Map();
 let sessionIdCounter = 0;
 
@@ -26,7 +26,7 @@ const determineDefaultCwd = () => {
 };
 
 function createWindow() {
-  mainWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 800,
@@ -40,15 +40,108 @@ function createWindow() {
     }
   });
 
+  windows.add(win);
+
+  win.on('closed', () => {
+    windows.delete(win);
+  });
+
   if (isDev) {
-    mainWindow.loadURL('http://localhost:31337');
+    win.loadURL('http://localhost:31337');
     // Don't auto-open DevTools - use Cmd+Option+I to open manually
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
+    win.loadFile(path.join(__dirname, '../../dist/index.html'));
   }
+
+  return win;
 }
 
-app.whenReady().then(createWindow);
+function setupMenu() {
+  const isMac = process.platform === 'darwin';
+
+  const template = [
+    // App menu (macOS only)
+    ...(isMac ? [{
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    }] : []),
+    // File menu
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New Window',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => createWindow()
+        },
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { role: 'quit' }
+      ]
+    },
+    // Edit menu
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+      ]
+    },
+    // View menu
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    // Window menu
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        ...(isMac ? [
+          { type: 'separator' },
+          { role: 'front' },
+          { type: 'separator' },
+          { role: 'window' }
+        ] : [
+          { role: 'close' }
+        ])
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
+app.whenReady().then(() => {
+  setupMenu();
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   sessions.forEach((session) => session.pty.kill());
@@ -119,20 +212,26 @@ ipcMain.handle('session:create', (event, options = {}) => {
   sessions.set(id, session);
 
   term.onData((data) => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(`session:data:${id}`, data);
-      
-      // Accumulate buffer for Claude sessions (for parsing/logging)
-      if (type === 'claude') {
-        session.buffer += data;
+    // Broadcast to all windows
+    for (const win of windows) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(`session:data:${id}`, data);
       }
+    }
+
+    // Accumulate buffer for Claude sessions (for parsing/logging)
+    if (type === 'claude') {
+      session.buffer += data;
     }
   });
 
   term.onExit(({ exitCode }) => {
     sessions.delete(id);
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send(`session:exit:${id}`, exitCode);
+    // Broadcast to all windows
+    for (const win of windows) {
+      if (!win.isDestroyed()) {
+        win.webContents.send(`session:exit:${id}`, exitCode);
+      }
     }
   });
 
@@ -171,7 +270,8 @@ ipcMain.on('session:interrupt', (event, id) => {
 
 // ============ Dialog handlers ============
 ipcMain.handle('dialog:select-directory', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
+  const focusedWindow = BrowserWindow.getFocusedWindow();
+  const result = await dialog.showOpenDialog(focusedWindow, {
     properties: ['openDirectory'],
     title: 'Select Working Directory'
   });
@@ -333,9 +433,11 @@ ipcMain.on('process:register', (event, { sessionId, pid, name, port, cwd }) => {
     cwd,
     startedAt: Date.now(),
   });
-  // Notify renderer of update
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('process:updated');
+  // Notify all windows of update
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('process:updated');
+    }
   }
 });
 
@@ -343,8 +445,11 @@ ipcMain.on('process:register', (event, { sessionId, pid, name, port, cwd }) => {
 ipcMain.on('process:unregister', (event, { sessionId, pid }) => {
   const key = `${sessionId}-${pid}`;
   spawnedProcesses.delete(key);
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('process:updated');
+  // Notify all windows of update
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('process:updated');
+    }
   }
 });
 

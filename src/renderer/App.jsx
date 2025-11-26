@@ -558,19 +558,20 @@ function MainArea({ viewMode, setViewMode }) {
             <>
             {/* Render ALL sessions/terminals - visibility handled inside each component */}
             {sessions.map(session => (
-                session.isClaudeSession && viewMode === 'pretty' ? (
+              <React.Fragment key={session.id}>
+                {/* Always render TerminalInstance to maintain xterm state */}
+                <TerminalInstance
+                  terminal={session}
+                  isActive={activeSessionId === session.id && (!session.isClaudeSession || viewMode === 'terminal')}
+                />
+                {/* Also render PrettyView for Claude sessions to maintain its state */}
+                {session.isClaudeSession && (
                   <PrettyView
-                    key={session.id}
                     sessionId={session.id}
-                    isActive={activeSessionId === session.id}
+                    isActive={activeSessionId === session.id && viewMode === 'pretty'}
                   />
-                ) : (
-                  <TerminalInstance
-                    key={session.id}
-                    terminal={session}
-                    isActive={activeSessionId === session.id}
-                  />
-                )
+                )}
+              </React.Fragment>
             ))}
             </>
         )}

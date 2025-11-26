@@ -7,20 +7,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
   resizeSession: (id, cols, rows) => ipcRenderer.send('session:resize', { id, cols, rows }),
   killSession: (id) => ipcRenderer.send('session:kill', id),
   interruptSession: (id) => ipcRenderer.send('session:interrupt', id),
-  
+
   onSessionData: (id, callback) => {
     const channel = `session:data:${id}`;
     const subscription = (event, data) => callback(data);
     ipcRenderer.on(channel, subscription);
     return () => ipcRenderer.removeListener(channel, subscription);
   },
-  
+
   onSessionExit: (id, callback) => {
     const channel = `session:exit:${id}`;
     const subscription = (event, exitCode) => callback(exitCode);
     ipcRenderer.on(channel, subscription);
     return () => ipcRenderer.removeListener(channel, subscription);
   },
+
+  // Aliases for PrettyView compatibility
+  onClaudeOutput: (id, callback) => {
+    const channel = `session:data:${id}`;
+    const subscription = (event, data) => callback(data);
+    ipcRenderer.on(channel, subscription);
+    return () => ipcRenderer.removeListener(channel, subscription);
+  },
+  sendClaudeMessage: (id, data) => ipcRenderer.send('session:input', { id, data }),
 
   // Dialog
   selectDirectory: () => ipcRenderer.invoke('dialog:select-directory'),

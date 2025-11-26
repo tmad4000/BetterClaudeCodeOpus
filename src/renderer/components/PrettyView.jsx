@@ -307,12 +307,10 @@ export default function PrettyView({ sessionId, isActive }) {
     setInputValue('');
   };
 
-  if (!isActive) return null;
-
   return (
     <div
       style={{
-        display: 'flex',
+        display: isActive ? 'flex' : 'none',
         flexDirection: 'column',
         height: '100%',
         background: 'var(--bg-primary)',
