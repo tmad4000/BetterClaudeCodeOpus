@@ -406,18 +406,18 @@ ipcMain.on('history:log-prompt', (event, data) => {
 });
 
 // Log session output (for full conversation history)
+// Use async file operations to avoid blocking
 ipcMain.on('history:log-session-output', (event, { sessionId, data, timestamp }) => {
-  try {
-    const sessionPath = getSessionHistoryPath(sessionId);
-    const entry = {
-      type: 'output',
-      data,
-      timestamp: timestamp || Date.now(),
-    };
-    fs.appendFileSync(sessionPath, JSON.stringify(entry) + '\n');
-  } catch (error) {
-    console.error('Failed to log session output:', error);
-  }
+  const sessionPath = getSessionHistoryPath(sessionId);
+  const entry = {
+    type: 'output',
+    data,
+    timestamp: timestamp || Date.now(),
+  };
+  // Use async append to avoid blocking main process
+  fs.appendFile(sessionPath, JSON.stringify(entry) + '\n', (err) => {
+    if (err) console.error('Failed to log session output:', err);
+  });
 });
 
 // Get prompt history

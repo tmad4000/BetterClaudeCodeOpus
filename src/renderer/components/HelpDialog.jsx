@@ -7,6 +7,7 @@ const shortcuts = [
   { keys: 'Cmd+W', action: 'Close current tab' },
   { keys: 'Cmd+Shift+W', action: 'Close window' },
   { keys: 'Cmd+B', action: 'Toggle sidebar' },
+  { keys: 'Cmd+F', action: 'Find in terminal' },
   { keys: 'Cmd+?', action: 'Show this help' },
   { keys: 'Ctrl+C', action: 'Interrupt (in terminal)' },
 ];

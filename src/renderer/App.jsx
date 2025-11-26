@@ -7,6 +7,7 @@ import PromptHistory from './components/PromptHistory';
 import ClaudeTerminal from './components/ClaudeTerminal';
 import HelpDialog from './components/HelpDialog';
 import TabBar from './components/TabBar';
+import SearchBar from './components/SearchBar';
 import {
   Plus, X, Terminal, Sparkles, Folder,
   Shield, ShieldCheck, Zap, Clock, Code, AlertCircle,
@@ -396,14 +397,21 @@ function Sidebar({ onShowHistory, onShowHelp, isCollapsed, onToggle }) {
   );
 }
 
-function MainArea({ viewMode, setViewMode }) {
-  const { sessions, activeSessionId } = useTerminal();
+function MainArea({ viewMode, setViewMode, showSearch, setShowSearch }) {
+  const { sessions, activeSessionId, getTerminalRef } = useTerminal();
 
   // Find the active session
   const activeSession = sessions.find(s => s.id === activeSessionId);
+  const activeTerminalRef = activeSessionId ? getTerminalRef(activeSessionId) : null;
 
   return (
-    <div className="main-content" style={{ display: 'flex', flexDirection: 'column' }}>
+    <div className="main-content" style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      {/* Search bar overlay */}
+      <SearchBar
+        isOpen={showSearch}
+        onClose={() => setShowSearch(false)}
+        terminalRef={activeTerminalRef}
+      />
       {/* Toolbar - simplified since tabs are at the top */}
       {activeSession && (
         <div
@@ -551,6 +559,7 @@ function AppContent() {
   const [viewMode, setViewMode] = useState('terminal'); // 'terminal' or 'pretty'
   const [showHistory, setShowHistory] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   const { createTerminal, sessions, currentCwd, showCwdWarning, setShowCwdWarning, launchOptions, permissionMode, activeSessionId } = useTerminal();
@@ -646,15 +655,21 @@ function AppContent() {
         e.preventDefault();
         setShowHelp(prev => !prev);
       }
-      // Escape to close help
-      if (e.key === 'Escape' && showHelp) {
-        setShowHelp(false);
+      // Command/Control + F for find/search
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        setShowSearch(prev => !prev);
+      }
+      // Escape to close help or search
+      if (e.key === 'Escape') {
+        if (showHelp) setShowHelp(false);
+        if (showSearch) setShowSearch(false);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [createTerminal, currentCwd, showHelp]);
+  }, [createTerminal, currentCwd, showHelp, showSearch]);
 
   // Handle Cmd+W from menu to close current tab
   const { closeTerminal } = useTerminal();
@@ -721,6 +736,8 @@ function AppContent() {
           <MainArea
               viewMode={viewMode}
               setViewMode={setViewMode}
+              showSearch={showSearch}
+              setShowSearch={setShowSearch}
           />
         </div>
       </div>

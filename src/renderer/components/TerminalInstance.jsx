@@ -1,10 +1,19 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useTerminal } from '../context/TerminalContext';
 import { RefreshCw } from './Icons';
 
 // Lazy load xterm to avoid SSR issues
 let XTerminal;
 let FitAddon;
+
+// Debounce function for batching operations
+function debounce(fn, ms) {
+  let timeoutId;
+  return (...args) => {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), ms);
+  };
+}
 
 export default function TerminalInstance({ terminal, isActive }) {
   const containerRef = useRef(null);
@@ -76,11 +85,21 @@ export default function TerminalInstance({ terminal, isActive }) {
 
         // Set up data listeners
         if (window.electronAPI) {
+          // Batch logging to reduce IPC overhead during heavy output
+          let logBuffer = '';
+          const flushLog = debounce(() => {
+            if (logBuffer && window.electronAPI) {
+              window.electronAPI.logSessionOutput(terminal.id, logBuffer);
+              logBuffer = '';
+            }
+          }, 100);
+
           const unsubscribeData = window.electronAPI.onSessionData(terminal.id, (data) => {
             term.write(data);
-            // Log to session history for Claude sessions
+            // Log to session history for Claude sessions (batched)
             if (terminal.type === 'claude') {
-               window.electronAPI.logSessionOutput(terminal.id, data);
+              logBuffer += data;
+              flushLog();
             }
           });
 
@@ -141,6 +160,29 @@ export default function TerminalInstance({ terminal, isActive }) {
         }
       }, 200);
     }
+  }, [isActive]);
+
+  // Periodically ensure active terminal has focus (helps with focus loss during heavy output)
+  useEffect(() => {
+    if (!isActive) return;
+
+    const checkFocus = () => {
+      if (xtermRef.current && document.activeElement !== containerRef.current) {
+        // Only refocus if the terminal container or its children don't have focus
+        const terminalArea = containerRef.current;
+        if (terminalArea && !terminalArea.contains(document.activeElement)) {
+          // Check if user is typing in another input (don't steal focus)
+          const activeTag = document.activeElement?.tagName?.toLowerCase();
+          if (activeTag !== 'input' && activeTag !== 'textarea') {
+            xtermRef.current.focus();
+          }
+        }
+      }
+    };
+
+    // Check focus every 500ms for active terminal
+    const interval = setInterval(checkFocus, 500);
+    return () => clearInterval(interval);
   }, [isActive]);
 
   const handleRestart = async () => {
