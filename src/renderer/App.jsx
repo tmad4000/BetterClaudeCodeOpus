@@ -558,7 +558,7 @@ function MainArea({ viewMode, setViewMode }) {
             <>
             {/* Render ALL sessions/terminals - visibility handled inside each component */}
             {sessions.map(session => (
-                session.type === 'claude' && viewMode === 'pretty' ? (
+                session.isClaudeSession && viewMode === 'pretty' ? (
                   <PrettyView
                     key={session.id}
                     sessionId={session.id}
