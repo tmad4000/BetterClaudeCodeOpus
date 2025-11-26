@@ -114,7 +114,25 @@ function Sidebar({ onShowHistory, isCollapsed, onToggle }) {
   };
 
   const handleNewClaude = async () => {
-      await createTerminal({ type: 'claude', cwd: currentCwd });
+    // Build claude command with flags based on permission mode
+    let claudeCmd = 'claude';
+    if (permissionMode === 'yolo') {
+      claudeCmd = 'claude --dangerously-skip-permissions';
+    }
+
+    const session = await createTerminal({
+      type: 'shell',
+      cwd: currentCwd,
+      title: `Claude ${permissionMode === 'yolo' ? '(YOLO)' : permissionMode === 'plan' ? '(Plan)' : ''}`.trim(),
+      claudeMode: permissionMode, // Track which mode was used
+      isClaudeSession: true, // Mark as a Claude session for UI purposes
+    });
+
+    if (session && window.electronAPI) {
+      setTimeout(() => {
+        window.electronAPI.sendSessionInput(session.id, claudeCmd + '\n');
+      }, 500);
+    }
   }
 
   const handleSelectDirectory = async () => {
@@ -132,6 +150,7 @@ function Sidebar({ onShowHistory, isCollapsed, onToggle }) {
           width: 48,
           minWidth: 48,
           padding: '8px 4px',
+          paddingTop: 40, // Space for window controls
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -148,7 +167,7 @@ function Sidebar({ onShowHistory, isCollapsed, onToggle }) {
             color: 'var(--text-secondary)',
             borderRadius: 'var(--radius-sm)',
           }}
-          title="Expand sidebar"
+          title="Expand sidebar (Cmd+B)"
         >
           <PanelLeftOpen style={{ width: 18, height: 18 }} />
         </button>
@@ -261,20 +280,24 @@ function Sidebar({ onShowHistory, isCollapsed, onToggle }) {
           <button
             onClick={handleNewClaude}
             style={{
-                width: 36,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: 0,
-                background: 'var(--accent-primary)',
-                color: 'white',
-                border: 'none',
-                borderRadius: 'var(--radius-md)',
-                cursor: 'pointer',
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              padding: '10px 12px',
+              background: permissionMode === 'yolo' ? 'var(--accent-orange)' : 'var(--accent-primary)',
+              color: 'white',
+              border: 'none',
+              borderRadius: 'var(--radius-md)',
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
             }}
-            title="New Claude Session"
+            title={`New Claude Session (${currentModeConfig.name} mode)`}
           >
-            <Sparkles style={{ width: 16, height: 16 }} />
+            <Sparkles style={{ width: 14, height: 14 }} />
+            Claude {permissionMode === 'yolo' && <Zap style={{ width: 12, height: 12 }} />}
           </button>
         </div>
 
@@ -416,13 +439,31 @@ function MainArea({ viewMode, setViewMode }) {
           {activeSession ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ fontSize: 14, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
-                {activeSession.type === 'claude' ? (
-                    <Sparkles style={{ width: 16, height: 16, color: 'var(--accent-primary)' }} />
+                {activeSession.isClaudeSession ? (
+                    <Sparkles style={{ width: 16, height: 16, color: activeSession.claudeMode === 'yolo' ? 'var(--accent-orange)' : 'var(--accent-primary)' }} />
                 ) : (
                     <Terminal style={{ width: 16, height: 16, color: 'var(--text-secondary)' }} />
                 )}
                 {activeSession.title}
               </span>
+              {/* Show Claude mode badge */}
+              {activeSession.isClaudeSession && activeSession.claudeMode && (
+                <span style={{
+                  fontSize: 11,
+                  color: activeSession.claudeMode === 'yolo' ? 'var(--accent-orange)' : 'var(--text-secondary)',
+                  fontWeight: 600,
+                  padding: '2px 8px',
+                  background: activeSession.claudeMode === 'yolo' ? 'rgba(210, 153, 34, 0.15)' : 'var(--bg-tertiary)',
+                  borderRadius: 'var(--radius-sm)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  textTransform: 'uppercase',
+                }}>
+                  {activeSession.claudeMode === 'yolo' && <Zap style={{ width: 10, height: 10 }} />}
+                  {PERMISSION_MODES[activeSession.claudeMode]?.name || activeSession.claudeMode}
+                </span>
+              )}
               <span style={{
                 fontSize: 13,
                 color: 'var(--accent-cyan)',
@@ -446,7 +487,7 @@ function MainArea({ viewMode, setViewMode }) {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* View mode toggle - Only for Claude sessions */}
-          {activeSession?.type === 'claude' && (
+          {activeSession?.isClaudeSession && (
             <div
               style={{
                 display: 'flex',
@@ -573,7 +614,9 @@ function AppContent() {
               const session = await createTerminal({
                   type: 'shell',
                   cwd: currentCwd,
-                  title: 'Claude'
+                  title: 'Claude',
+                  claudeMode: 'default',
+                  isClaudeSession: true,
               });
               if (session && window.electronAPI) {
                   // Wait for shell to initialize, then type claude command

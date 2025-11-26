@@ -74,6 +74,8 @@ export function TerminalProvider({ children }) {
         type,
         createdAt: Date.now(),
         permissionMode: type === 'claude' ? permissionMode : undefined,
+        claudeMode: options.claudeMode,
+        isClaudeSession: options.isClaudeSession || false,
       };
 
       setSessions((prev) => [...prev, newSession]);
