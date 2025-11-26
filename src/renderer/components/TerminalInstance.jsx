@@ -126,13 +126,20 @@ export default function TerminalInstance({ terminal, isActive }) {
 
   useEffect(() => {
     if (isActive && fitAddonRef.current && xtermRef.current) {
-      // Use setTimeout to ensure DOM has updated after display change
+      // Use setTimeout to ensure DOM has updated after visibility change
       setTimeout(() => {
         fitAddonRef.current?.fit();
         // Refresh the terminal to redraw content after being hidden
         xtermRef.current?.refresh(0, xtermRef.current.rows - 1);
         xtermRef.current?.focus();
-      }, 0);
+      }, 50);
+
+      // Double-check focus after a longer delay (sometimes needed)
+      setTimeout(() => {
+        if (isActive && xtermRef.current) {
+          xtermRef.current.focus();
+        }
+      }, 200);
     }
   }, [isActive]);
 
