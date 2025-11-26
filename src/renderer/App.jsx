@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { TerminalProvider, useTerminal, PERMISSION_MODES } from './context/TerminalContext';
 import TerminalInstance from './components/TerminalInstance';
 import ProcessTracker from './components/ProcessTracker';
@@ -6,10 +6,11 @@ import PrettyView from './components/PrettyView';
 import PromptHistory from './components/PromptHistory';
 import ClaudeTerminal from './components/ClaudeTerminal';
 import HelpDialog from './components/HelpDialog';
+import TabBar from './components/TabBar';
 import {
   Plus, X, Terminal, Sparkles, Folder,
   Shield, ShieldCheck, Zap, Clock, Code, AlertCircle,
-  PanelLeftClose, PanelLeftOpen, HelpCircle
+  PanelLeftClose, PanelLeftOpen, HelpCircle, ChevronDown
 } from './components/Icons';
 
 function formatRelativeTime(timestamp) {
@@ -96,26 +97,31 @@ function PermissionModeSelector({ currentMode, onSelect, onClose }) {
 
 function Sidebar({ onShowHistory, onShowHelp, isCollapsed, onToggle }) {
   const {
-    sessions,
-    activeSessionId,
-    setActiveSessionId,
     currentCwd,
     permissionMode,
     setPermissionMode,
     createTerminal,
-    closeTerminal,
     selectDirectory,
   } = useTerminal();
 
   const [showModeSelector, setShowModeSelector] = useState(false);
   const [showProcessTracker, setShowProcessTracker] = useState(false);
+  const modeDropdownRef = useRef(null);
 
-  const handleNewTerminal = async () => {
-    await createTerminal({ type: 'shell', cwd: currentCwd });
-  };
+  // Close mode selector when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (modeDropdownRef.current && !modeDropdownRef.current.contains(e.target)) {
+        setShowModeSelector(false);
+      }
+    };
+    if (showModeSelector) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showModeSelector]);
 
   const handleNewClaude = async () => {
-    // Build claude command with flags based on permission mode
     let claudeCmd = 'claude';
     if (permissionMode === 'yolo') {
       claudeCmd = 'claude --dangerously-skip-permissions';
@@ -125,8 +131,8 @@ function Sidebar({ onShowHistory, onShowHelp, isCollapsed, onToggle }) {
       type: 'shell',
       cwd: currentCwd,
       title: `Claude ${permissionMode === 'yolo' ? '(YOLO)' : permissionMode === 'plan' ? '(Plan)' : ''}`.trim(),
-      claudeMode: permissionMode, // Track which mode was used
-      isClaudeSession: true, // Mark as a Claude session for UI purposes
+      claudeMode: permissionMode,
+      isClaudeSession: true,
     });
 
     if (session && window.electronAPI) {
@@ -134,7 +140,7 @@ function Sidebar({ onShowHistory, onShowHelp, isCollapsed, onToggle }) {
         window.electronAPI.sendSessionInput(session.id, claudeCmd + '\n');
       }, 500);
     }
-  }
+  };
 
   const handleSelectDirectory = async () => {
     await selectDirectory();
@@ -142,7 +148,7 @@ function Sidebar({ onShowHistory, onShowHelp, isCollapsed, onToggle }) {
 
   const currentModeConfig = PERMISSION_MODES[permissionMode];
 
-  // Collapsed sidebar - just show icons
+  // Collapsed sidebar - minimal view
   if (isCollapsed) {
     return (
       <div
@@ -151,7 +157,6 @@ function Sidebar({ onShowHistory, onShowHelp, isCollapsed, onToggle }) {
           width: 48,
           minWidth: 48,
           padding: '8px 4px',
-          paddingTop: 40, // Space for window controls
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -174,217 +179,169 @@ function Sidebar({ onShowHistory, onShowHelp, isCollapsed, onToggle }) {
         </button>
 
         <button
-          onClick={handleNewTerminal}
-          style={{
-            background: 'var(--bg-tertiary)',
-            border: '1px solid var(--border-primary)',
-            padding: 8,
-            cursor: 'pointer',
-            color: 'var(--text-primary)',
-            borderRadius: 'var(--radius-sm)',
-          }}
-          title="New Terminal (Cmd+T)"
-        >
-          <Plus style={{ width: 16, height: 16 }} />
-        </button>
-
-        <button
           onClick={handleNewClaude}
           style={{
-            background: 'var(--accent-primary)',
+            background: permissionMode === 'yolo' ? 'var(--accent-orange)' : 'var(--accent-primary)',
             border: 'none',
             padding: 8,
             cursor: 'pointer',
             color: 'white',
             borderRadius: 'var(--radius-sm)',
           }}
-          title="New Claude Session"
+          title={`New Claude Session (${currentModeConfig.name})`}
         >
           <Sparkles style={{ width: 16, height: 16 }} />
         </button>
 
-        <div style={{ flex: 1, width: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, paddingTop: 8 }}>
-          {sessions.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveSessionId(tab.id)}
-              style={{
-                background: activeSessionId === tab.id ? 'var(--bg-tertiary)' : 'transparent',
-                border: activeSessionId === tab.id ? '1px solid var(--border-primary)' : '1px solid transparent',
-                padding: 8,
-                cursor: 'pointer',
-                color: tab.type === 'claude' ? PERMISSION_MODES[tab.permissionMode || 'default'].color : 'var(--text-secondary)',
-                borderRadius: 'var(--radius-sm)',
-              }}
-              title={tab.title}
-            >
-              {tab.type === 'claude' ? (
-                <PermissionModeIcon mode={tab.permissionMode || 'default'} size={16} />
-              ) : (
-                <Terminal style={{ width: 16, height: 16 }} />
-              )}
-            </button>
-          ))}
-        </div>
+        <div style={{ flex: 1 }} />
+
+        <button
+          onClick={onShowHelp}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            padding: 8,
+            cursor: 'pointer',
+            color: 'var(--text-muted)',
+            borderRadius: 'var(--radius-sm)',
+          }}
+          title="Help (Cmd+?)"
+        >
+          <HelpCircle style={{ width: 16, height: 16 }} />
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="sidebar">
+    <div className="sidebar" style={{ position: 'relative' }}>
+      {/* Floating collapse button - top right */}
+      <button
+        onClick={onToggle}
+        style={{
+          position: 'absolute',
+          top: 10,
+          right: 8,
+          background: 'var(--bg-tertiary)',
+          border: '1px solid var(--border-primary)',
+          padding: 4,
+          cursor: 'pointer',
+          color: 'var(--text-muted)',
+          borderRadius: 'var(--radius-sm)',
+          zIndex: 10,
+        }}
+        title="Collapse sidebar (Cmd+B)"
+      >
+        <PanelLeftClose style={{ width: 14, height: 14 }} />
+      </button>
+
       <div className="sidebar-header">
         <h1>
           <Terminal style={{ width: 16, height: 16, color: 'var(--text-primary)' }} />
           Better Terminal
         </h1>
-        <button
-          onClick={onToggle}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            padding: 4,
-            cursor: 'pointer',
-            color: 'var(--text-muted)',
-            borderRadius: 'var(--radius-sm)',
-            marginLeft: 'auto',
-          }}
-          title="Collapse sidebar"
-        >
-          <PanelLeftClose style={{ width: 16, height: 16 }} />
-        </button>
       </div>
 
       <div className="sidebar-section" style={{ paddingTop: 16 }}>
-        <div style={{ padding: '0 8px', marginBottom: 12, display: 'flex', gap: 8 }}>
-          <button
-            onClick={handleNewTerminal}
-            style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              padding: '10px 12px',
-              background: 'var(--bg-tertiary)',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--border-primary)',
-              borderRadius: 'var(--radius-md)',
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
-            title="New Terminal (Cmd+T)"
-          >
-            <Plus style={{ width: 14, height: 14 }} />
-            Terminal
-          </button>
-          <button
-            onClick={handleNewClaude}
-            style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              padding: '10px 12px',
-              background: permissionMode === 'yolo' ? 'var(--accent-orange)' : 'var(--accent-primary)',
-              color: 'white',
-              border: 'none',
-              borderRadius: 'var(--radius-md)',
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
-            title={`New Claude Session (${currentModeConfig.name} mode)`}
-          >
-            <Sparkles style={{ width: 14, height: 14 }} />
-            Claude {permissionMode === 'yolo' && <Zap style={{ width: 12, height: 12 }} />}
-          </button>
-        </div>
-
-        {/* Permission Mode Selector - Affects new Claude sessions */}
-        <div style={{ padding: '0 8px', marginBottom: 16, position: 'relative' }}>
-          <div
-            onClick={() => setShowModeSelector(!showModeSelector)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '10px 12px',
-              background: 'var(--bg-tertiary)',
-              border: '1px solid var(--border-primary)',
-              borderRadius: 'var(--radius-md)',
-              cursor: 'pointer',
-            }}
-          >
-            <div style={{ color: currentModeConfig.color }}>
-              <PermissionModeIcon mode={permissionMode} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
-                {currentModeConfig.name} Mode
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                For new Claude sessions
-              </div>
-            </div>
+        {/* New Claude button with mode dropdown */}
+        <div style={{ padding: '0 8px', marginBottom: 16, position: 'relative' }} ref={modeDropdownRef}>
+          <div style={{ display: 'flex', gap: 0 }}>
+            <button
+              onClick={handleNewClaude}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                padding: '10px 12px',
+                background: permissionMode === 'yolo' ? 'var(--accent-orange)' : 'var(--accent-primary)',
+                color: 'white',
+                border: 'none',
+                borderRadius: 'var(--radius-md) 0 0 var(--radius-md)',
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+              title={`New Claude Session (${currentModeConfig.name} mode)`}
+            >
+              <Sparkles style={{ width: 14, height: 14 }} />
+              New Claude
+              {permissionMode === 'yolo' && <Zap style={{ width: 12, height: 12 }} />}
+            </button>
+            <button
+              onClick={() => setShowModeSelector(!showModeSelector)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '10px 8px',
+                background: permissionMode === 'yolo' ? 'var(--accent-orange)' : 'var(--accent-primary)',
+                color: 'white',
+                border: 'none',
+                borderLeft: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: '0 var(--radius-md) var(--radius-md) 0',
+                cursor: 'pointer',
+              }}
+              title="Select mode"
+            >
+              <ChevronDown style={{ width: 14, height: 14 }} />
+            </button>
           </div>
 
+          {/* Mode dropdown */}
           {showModeSelector && (
-            <PermissionModeSelector
-              currentMode={permissionMode}
-              onSelect={setPermissionMode}
-              onClose={() => setShowModeSelector(false)}
-            />
+            <div
+              style={{
+                position: 'absolute',
+                top: '100%',
+                left: 8,
+                right: 8,
+                marginTop: 4,
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-primary)',
+                borderRadius: 'var(--radius-md)',
+                padding: 4,
+                zIndex: 100,
+                boxShadow: 'var(--shadow-lg)',
+              }}
+            >
+              {Object.entries(PERMISSION_MODES).map(([key, mode]) => (
+                <div
+                  key={key}
+                  onClick={() => {
+                    setPermissionMode(key);
+                    setShowModeSelector(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '8px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer',
+                    background: permissionMode === key ? 'var(--bg-tertiary)' : 'transparent',
+                  }}
+                >
+                  <div style={{ color: mode.color }}>
+                    <PermissionModeIcon mode={key} size={14} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>
+                      {mode.name}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                      {mode.description}
+                    </div>
+                  </div>
+                  {permissionMode === key && (
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: mode.color }} />
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
-
-        <div className="sidebar-section-title">Open Tabs</div>
-        {sessions.length === 0 ? (
-          <div style={{ padding: '12px 20px', color: 'var(--text-muted)', fontSize: 13 }}>
-            No open tabs.
-          </div>
-        ) : (
-          sessions.map((tab) => {
-             const isActive = activeSessionId === tab.id;
-             return (
-            <div
-              key={tab.id}
-              className={`sidebar-item ${isActive ? 'active' : ''}`}
-              onClick={() => setActiveSessionId(tab.id)}
-            >
-              <div style={{ color: tab.type === 'claude' ? PERMISSION_MODES[tab.permissionMode || 'default'].color : 'var(--text-secondary)' }}>
-                {tab.type === 'claude' ? (
-                   <PermissionModeIcon mode={tab.permissionMode || 'default'} size={18} />
-                ) : (
-                   <Terminal style={{ width: 18, height: 18 }} />
-                )}
-              </div>
-              <div className="sidebar-item-content">
-                <div className="sidebar-item-title">{tab.title}</div>
-                <div className="sidebar-item-meta">
-                  {tab.type === 'claude' ? 'Claude Code' : 'Terminal'}
-                </div>
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeTerminal(tab.id);
-                }}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  padding: 4,
-                  cursor: 'pointer',
-                  color: 'var(--text-muted)',
-                  borderRadius: 4,
-                }}
-              >
-                <X style={{ width: 14, height: 14 }} />
-              </button>
-            </div>
-          )})
-        )}
       </div>
 
       <div style={{ padding: 16, borderTop: '1px solid var(--border-primary)', marginTop: 'auto' }}>
@@ -446,59 +403,55 @@ function MainArea({ viewMode, setViewMode }) {
 
   return (
     <div className="main-content" style={{ display: 'flex', flexDirection: 'column' }}>
-      {/* Top bar */}
-      <div className="top-bar">
-        <div className="top-bar-tabs">
-          {activeSession ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 14, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
-                {activeSession.isClaudeSession ? (
-                    <Sparkles style={{ width: 16, height: 16, color: activeSession.claudeMode === 'yolo' ? 'var(--accent-orange)' : 'var(--accent-primary)' }} />
-                ) : (
-                    <Terminal style={{ width: 16, height: 16, color: 'var(--text-secondary)' }} />
-                )}
-                {activeSession.title}
-              </span>
-              {/* Show Claude mode badge */}
-              {activeSession.isClaudeSession && activeSession.claudeMode && (
-                <span style={{
-                  fontSize: 11,
-                  color: activeSession.claudeMode === 'yolo' ? 'var(--accent-orange)' : 'var(--text-secondary)',
-                  fontWeight: 600,
-                  padding: '2px 8px',
-                  background: activeSession.claudeMode === 'yolo' ? 'rgba(210, 153, 34, 0.15)' : 'var(--bg-tertiary)',
-                  borderRadius: 'var(--radius-sm)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  textTransform: 'uppercase',
-                }}>
-                  {activeSession.claudeMode === 'yolo' && <Zap style={{ width: 10, height: 10 }} />}
-                  {PERMISSION_MODES[activeSession.claudeMode]?.name || activeSession.claudeMode}
-                </span>
-              )}
+      {/* Toolbar - simplified since tabs are at the top */}
+      {activeSession && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '6px 12px',
+            background: 'var(--bg-secondary)',
+            borderBottom: '1px solid var(--border-primary)',
+          }}
+        >
+          {/* Working directory + mode badge */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{
+              fontSize: 12,
+              color: 'var(--accent-cyan)',
+              fontWeight: 500,
+              fontFamily: 'monospace',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '2px 6px',
+              background: 'rgba(34, 211, 238, 0.1)',
+              borderRadius: 'var(--radius-sm)',
+            }}>
+              <Folder style={{ width: 12, height: 12 }} />
+              {activeSession.cwd || '~/code'}
+            </span>
+            {/* Show Claude mode badge */}
+            {activeSession.isClaudeSession && activeSession.claudeMode && (
               <span style={{
-                fontSize: 13,
-                color: 'var(--accent-cyan)',
-                fontWeight: 500,
-                fontFamily: 'monospace',
+                fontSize: 10,
+                color: activeSession.claudeMode === 'yolo' ? 'var(--accent-orange)' : 'var(--text-muted)',
+                fontWeight: 600,
+                padding: '2px 6px',
+                background: activeSession.claudeMode === 'yolo' ? 'rgba(210, 153, 34, 0.15)' : 'var(--bg-tertiary)',
+                borderRadius: 'var(--radius-sm)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
-                padding: '2px 8px',
-                background: 'rgba(34, 211, 238, 0.1)',
-                borderRadius: 'var(--radius-sm)',
+                gap: 3,
+                textTransform: 'uppercase',
               }}>
-                <Folder style={{ width: 14, height: 14 }} />
-                {activeSession.cwd || '~/code'}
+                {activeSession.claudeMode === 'yolo' && <Zap style={{ width: 9, height: 9 }} />}
+                {PERMISSION_MODES[activeSession.claudeMode]?.name || activeSession.claudeMode}
               </span>
-            </div>
-          ) : (
-            <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>No active tab</span>
-          )}
-        </div>
+            )}
+          </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* View mode toggle - Only for Claude sessions */}
           {activeSession?.isClaudeSession && (
             <div
@@ -506,7 +459,7 @@ function MainArea({ viewMode, setViewMode }) {
                 display: 'flex',
                 background: 'var(--bg-tertiary)',
                 border: '1px solid var(--border-primary)',
-                borderRadius: 'var(--radius-md)',
+                borderRadius: 'var(--radius-sm)',
                 overflow: 'hidden',
               }}
             >
@@ -516,15 +469,15 @@ function MainArea({ viewMode, setViewMode }) {
                   display: 'flex',
                   alignItems: 'center',
                   gap: 4,
-                  padding: '4px 10px',
+                  padding: '3px 8px',
                   background: viewMode === 'terminal' ? 'var(--accent-primary)' : 'transparent',
                   color: viewMode === 'terminal' ? 'white' : 'var(--text-secondary)',
                   border: 'none',
-                  fontSize: 12,
+                  fontSize: 11,
                   cursor: 'pointer',
                 }}
               >
-                <Terminal style={{ width: 14, height: 14 }} />
+                <Terminal style={{ width: 12, height: 12 }} />
                 Terminal
               </button>
               <button
@@ -533,21 +486,21 @@ function MainArea({ viewMode, setViewMode }) {
                   display: 'flex',
                   alignItems: 'center',
                   gap: 4,
-                  padding: '4px 10px',
+                  padding: '3px 8px',
                   background: viewMode === 'pretty' ? 'var(--accent-primary)' : 'transparent',
                   color: viewMode === 'pretty' ? 'white' : 'var(--text-secondary)',
                   border: 'none',
-                  fontSize: 12,
+                  fontSize: 11,
                   cursor: 'pointer',
                 }}
               >
-                <Code style={{ width: 14, height: 14 }} />
+                <Code style={{ width: 12, height: 12 }} />
                 Pretty
               </button>
             </div>
           )}
         </div>
-      </div>
+      )}
 
       {/* Content Area */}
       <div
@@ -564,7 +517,7 @@ function MainArea({ viewMode, setViewMode }) {
                 <Terminal className="empty-state-icon" />
                 <div className="empty-state-title">No Open Tabs</div>
                 <div className="empty-state-description">
-                  Press Cmd+T to open a new terminal.
+                  Press Cmd+T to open a new terminal or click the + button.
                 </div>
               </div>
         ) : (
@@ -589,26 +542,6 @@ function MainArea({ viewMode, setViewMode }) {
             </>
         )}
       </div>
-
-      {/* Hint bar */}
-      {activeSession && (
-        <div
-          style={{
-            padding: '8px 16px',
-            background: 'var(--bg-secondary)',
-            borderTop: '1px solid var(--border-primary)',
-            fontSize: 12,
-            color: 'var(--text-muted)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 16,
-          }}
-        >
-          <span>{activeSession.type === 'claude' ? 'Claude Session' : 'Standard Terminal'}</span>
-          <span style={{ color: 'var(--text-muted)' }}>|</span>
-          <span><kbd style={{ background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: 4 }}>Cmd+T</kbd> New Terminal</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -619,8 +552,20 @@ function AppContent() {
   const [showHelp, setShowHelp] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const { createTerminal, sessions, currentCwd, showCwdWarning, setShowCwdWarning, launchOptions, permissionMode } = useTerminal();
+  const { createTerminal, sessions, currentCwd, showCwdWarning, setShowCwdWarning, launchOptions, permissionMode, activeSessionId } = useTerminal();
   const [hasInitialized, setHasInitialized] = useState(false);
+
+  // Focus the terminal when the app opens
+  useEffect(() => {
+    // Small delay to ensure terminal is mounted
+    const timer = setTimeout(() => {
+      const terminalEl = document.querySelector('.xterm-helper-textarea');
+      if (terminalEl) {
+        terminalEl.focus();
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [activeSessionId]);
 
   // Initialize: Start a shell terminal, then type `claude` into it
   // Respects launch options (--claude, --yolo, path argument)
@@ -656,6 +601,32 @@ function AppContent() {
       }
   }, [hasInitialized, sessions.length, createTerminal, currentCwd, launchOptions, permissionMode]);
 
+  // Handlers for new tabs (from TabBar)
+  const handleNewTerminal = async () => {
+    await createTerminal({ type: 'shell', cwd: currentCwd });
+  };
+
+  const handleNewClaude = async () => {
+    let claudeCmd = 'claude';
+    if (permissionMode === 'yolo') {
+      claudeCmd = 'claude --dangerously-skip-permissions';
+    }
+
+    const session = await createTerminal({
+      type: 'shell',
+      cwd: currentCwd,
+      title: `Claude ${permissionMode === 'yolo' ? '(YOLO)' : permissionMode === 'plan' ? '(Plan)' : ''}`.trim(),
+      claudeMode: permissionMode,
+      isClaudeSession: true,
+    });
+
+    if (session && window.electronAPI) {
+      setTimeout(() => {
+        window.electronAPI.sendSessionInput(session.id, claudeCmd + '\n');
+      }, 500);
+    }
+  };
+
   // Handle global shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -687,47 +658,54 @@ function AppContent() {
   return (
     <div className="app">
       <div className="titlebar-drag-region" />
-      <Sidebar
-        onShowHistory={() => setShowHistory(true)}
-        onShowHelp={() => setShowHelp(true)}
-        isCollapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+      {/* Tab bar at the very top */}
+      <TabBar
+        onNewTerminal={handleNewTerminal}
+        onNewClaude={handleNewClaude}
       />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        {showCwdWarning && (
-            <div style={{
-                background: 'rgba(210, 153, 34, 0.2)',
-                color: 'var(--accent-orange)',
-                padding: '8px 16px',
-                fontSize: 13,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                borderBottom: '1px solid rgba(210, 153, 34, 0.3)',
-            }}>
-                <AlertCircle style={{ width: 16, height: 16 }} />
-                <span>
-                    <strong>Note:</strong> "~/code" directory not found. Defaulting to home directory ({currentCwd}).
-                </span>
-                <button
-                    onClick={() => setShowCwdWarning(false)}
-                    style={{
-                        marginLeft: 'auto',
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'inherit',
-                        cursor: 'pointer',
-                        display: 'flex',
-                    }}
-                >
-                    <X style={{ width: 14, height: 14 }} />
-                </button>
-            </div>
-        )}
-        <MainArea
-            viewMode={viewMode}
-            setViewMode={setViewMode}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <Sidebar
+          onShowHistory={() => setShowHistory(true)}
+          onShowHelp={() => setShowHelp(true)}
+          isCollapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
         />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {showCwdWarning && (
+              <div style={{
+                  background: 'rgba(210, 153, 34, 0.2)',
+                  color: 'var(--accent-orange)',
+                  padding: '8px 16px',
+                  fontSize: 13,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  borderBottom: '1px solid rgba(210, 153, 34, 0.3)',
+              }}>
+                  <AlertCircle style={{ width: 16, height: 16 }} />
+                  <span>
+                      <strong>Note:</strong> "~/code" directory not found. Defaulting to home directory ({currentCwd}).
+                  </span>
+                  <button
+                      onClick={() => setShowCwdWarning(false)}
+                      style={{
+                          marginLeft: 'auto',
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'inherit',
+                          cursor: 'pointer',
+                          display: 'flex',
+                      }}
+                  >
+                      <X style={{ width: 14, height: 14 }} />
+                  </button>
+              </div>
+          )}
+          <MainArea
+              viewMode={viewMode}
+              setViewMode={setViewMode}
+          />
+        </div>
       </div>
       <PromptHistory
         isOpen={showHistory}
