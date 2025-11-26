@@ -95,9 +95,9 @@ ipcMain.handle('session:create', (event, options = {}) => {
       }
     });
   } else {
-    // Standard shell
+    // Standard shell - spawn as login shell to get proper PATH
     const shell = process.env.SHELL || '/bin/zsh';
-    term = pty.spawn(shell, [], {
+    term = pty.spawn(shell, ['--login'], {
       name: 'xterm-256color',
       cols: options.cols || 80,
       rows: options.rows || 24,
