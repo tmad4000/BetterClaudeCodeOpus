@@ -7,7 +7,8 @@ import PromptHistory from './components/PromptHistory';
 import ClaudeTerminal from './components/ClaudeTerminal';
 import {
   Plus, X, Terminal, Sparkles, Folder,
-  Shield, ShieldCheck, Zap, Clock, Code, AlertCircle
+  Shield, ShieldCheck, Zap, Clock, Code, AlertCircle,
+  PanelLeftClose, PanelLeftOpen
 } from './components/Icons';
 
 function formatRelativeTime(timestamp) {
@@ -92,7 +93,7 @@ function PermissionModeSelector({ currentMode, onSelect, onClose }) {
   );
 }
 
-function Sidebar({ onShowHistory }) {
+function Sidebar({ onShowHistory, isCollapsed, onToggle }) {
   const {
     sessions,
     activeSessionId,
@@ -111,7 +112,7 @@ function Sidebar({ onShowHistory }) {
   const handleNewTerminal = async () => {
     await createTerminal({ type: 'shell', cwd: currentCwd });
   };
-  
+
   const handleNewClaude = async () => {
       await createTerminal({ type: 'claude', cwd: currentCwd });
   }
@@ -122,6 +123,93 @@ function Sidebar({ onShowHistory }) {
 
   const currentModeConfig = PERMISSION_MODES[permissionMode];
 
+  // Collapsed sidebar - just show icons
+  if (isCollapsed) {
+    return (
+      <div
+        className="sidebar"
+        style={{
+          width: 48,
+          minWidth: 48,
+          padding: '8px 4px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 8,
+        }}
+      >
+        <button
+          onClick={onToggle}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            padding: 8,
+            cursor: 'pointer',
+            color: 'var(--text-secondary)',
+            borderRadius: 'var(--radius-sm)',
+          }}
+          title="Expand sidebar"
+        >
+          <PanelLeftOpen style={{ width: 18, height: 18 }} />
+        </button>
+
+        <button
+          onClick={handleNewTerminal}
+          style={{
+            background: 'var(--bg-tertiary)',
+            border: '1px solid var(--border-primary)',
+            padding: 8,
+            cursor: 'pointer',
+            color: 'var(--text-primary)',
+            borderRadius: 'var(--radius-sm)',
+          }}
+          title="New Terminal (Cmd+T)"
+        >
+          <Plus style={{ width: 16, height: 16 }} />
+        </button>
+
+        <button
+          onClick={handleNewClaude}
+          style={{
+            background: 'var(--accent-primary)',
+            border: 'none',
+            padding: 8,
+            cursor: 'pointer',
+            color: 'white',
+            borderRadius: 'var(--radius-sm)',
+          }}
+          title="New Claude Session"
+        >
+          <Sparkles style={{ width: 16, height: 16 }} />
+        </button>
+
+        <div style={{ flex: 1, width: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, paddingTop: 8 }}>
+          {sessions.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveSessionId(tab.id)}
+              style={{
+                background: activeSessionId === tab.id ? 'var(--bg-tertiary)' : 'transparent',
+                border: activeSessionId === tab.id ? '1px solid var(--border-primary)' : '1px solid transparent',
+                padding: 8,
+                cursor: 'pointer',
+                color: tab.type === 'claude' ? PERMISSION_MODES[tab.permissionMode || 'default'].color : 'var(--text-secondary)',
+                borderRadius: 'var(--radius-sm)',
+              }}
+              title={tab.title}
+            >
+              {tab.type === 'claude' ? (
+                <PermissionModeIcon mode={tab.permissionMode || 'default'} size={16} />
+              ) : (
+                <Terminal style={{ width: 16, height: 16 }} />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="sidebar">
       <div className="sidebar-header">
@@ -129,6 +217,21 @@ function Sidebar({ onShowHistory }) {
           <Terminal style={{ width: 16, height: 16, color: 'var(--text-primary)' }} />
           Better Terminal
         </h1>
+        <button
+          onClick={onToggle}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            padding: 4,
+            cursor: 'pointer',
+            color: 'var(--text-muted)',
+            borderRadius: 'var(--radius-sm)',
+            marginLeft: 'auto',
+          }}
+          title="Collapse sidebar"
+        >
+          <PanelLeftClose style={{ width: 16, height: 16 }} />
+        </button>
       </div>
 
       <div className="sidebar-section" style={{ paddingTop: 16 }}>
@@ -458,6 +561,7 @@ function MainArea({ viewMode, setViewMode }) {
 function AppContent() {
   const [viewMode, setViewMode] = useState('terminal'); // 'terminal' or 'pretty'
   const [showHistory, setShowHistory] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const { createTerminal, sessions, currentCwd, showCwdWarning, setShowCwdWarning } = useTerminal();
   const [hasInitialized, setHasInitialized] = useState(false);
@@ -490,6 +594,11 @@ function AppContent() {
         e.preventDefault();
         createTerminal({ type: 'shell', cwd: currentCwd });
       }
+      // Command/Control + B to toggle sidebar
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+        e.preventDefault();
+        setSidebarCollapsed(prev => !prev);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -501,6 +610,8 @@ function AppContent() {
       <div className="titlebar-drag-region" />
       <Sidebar
         onShowHistory={() => setShowHistory(true)}
+        isCollapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {showCwdWarning && (
